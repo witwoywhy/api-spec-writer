@@ -10,9 +10,7 @@ import {
   Folder,
   FolderPlus,
   FolderOpen,
-  ListPlus,
   Plus,
-  Save,
   Trash2,
 } from "lucide-react";
 import "./styles.css";
@@ -261,8 +259,9 @@ ${mappingParts}
 }
 
 function App() {
-  const [store, setStore] = useState<StoreDocument>(() => loadStore());
-  const [selectedProjectId, setSelectedProjectId] = useState(() => loadStore().projects[0]?.id ?? "");
+  const [initialStore] = useState(() => loadStore());
+  const [store, setStore] = useState<StoreDocument>(initialStore);
+  const [selectedProjectId, setSelectedProjectId] = useState(initialStore.projects[0]?.id ?? "");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [page, setPage] = useState<Page>("services");
   const [showDisplay, setShowDisplay] = useState(true);
@@ -595,38 +594,6 @@ function ProjectTree({
         {projects.length === 0 && <p className="empty">Create a project to start.</p>}
       </div>
     </section>
-  );
-}
-
-function ServiceList({
-  project,
-  selectedServiceId,
-  onCreateService,
-  onSelectService,
-}: {
-  project: Project;
-  selectedServiceId: string;
-  onCreateService: () => void;
-  onSelectService: (id: string) => void;
-}) {
-  return (
-    <>
-      <div className="panel-title">
-        <h3>Services</h3>
-        <button className="primary" type="button" onClick={onCreateService}><FilePlus2 size={16} /> New</button>
-      </div>
-      <Fieldset title="Service List">
-        <div className="service-list">
-          {project.services.map((service) => (
-            <button className={service.id === selectedServiceId ? "service active" : "service"} key={service.id} type="button" onClick={() => onSelectService(service.id)}>
-              <span>{service.name}</span>
-              <small>{service.spec.method} {service.spec.url}</small>
-            </button>
-          ))}
-          {project.services.length === 0 && <p className="empty">No services yet.</p>}
-        </div>
-      </Fieldset>
-    </>
   );
 }
 
