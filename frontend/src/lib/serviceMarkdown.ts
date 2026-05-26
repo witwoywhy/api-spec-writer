@@ -54,13 +54,13 @@ export function serviceMarkdown(spec: ServiceSpec, projectErrorCodes: ErrorCode[
   const mapping = spec.mappingSections.filter((section) => section.rows.length > 0);
   const mappingParts = mapping.length
     ? [
-        "## Mapping",
+        "## Field to Field Mapping",
         ...mapping.map((section) => {
           const rows = section.rows.map((row) => `| ${code(escapePipe(row.target))} | ${code(escapePipe(row.from))} | ${escapePipe(row.description)} |`).join("\n");
           return `\n### ${escapePipe(section.name || "Mapping")}\n\n| Target | From | Description |\n|--------|------|-------------|\n${rows}`;
         }),
       ].join("\n")
-    : "## Mapping\n\n_None._";
+    : "## Field to Field Mapping\n\n_None._";
 
   return `# ${spec.name || "[SERVICE OR USE CASE NAME]"}
 

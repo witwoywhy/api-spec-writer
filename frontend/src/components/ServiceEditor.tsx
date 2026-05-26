@@ -139,8 +139,18 @@ export function ServiceEditor({
       </Fieldset>
 
       <Fieldset title="Response">
-        <Label text="Example JSON"><textarea value={spec.responseExample} onChange={(event) => patch({ responseExample: event.target.value })} /></Label>
-        <FieldRows rows={spec.responseFields} locations={RESPONSE_LOCATIONS} addLabel="Add Response Field" onAdd={(location) => addField("responseFields", location)} onUpdate={(id, row) => updateField("responseFields", id, row)} onRemove={(id) => removeField("responseFields", id)} />
+        <FieldRows
+          rows={spec.responseFields}
+          locations={RESPONSE_LOCATIONS}
+          addLabel="Add Response Field"
+          exampleLocation="BODY"
+          exampleLabel="Example JSON"
+          exampleValue={spec.responseExample}
+          onExampleChange={(responseExample) => patch({ responseExample })}
+          onAdd={(location) => addField("responseFields", location)}
+          onUpdate={(id, row) => updateField("responseFields", id, row)}
+          onRemove={(id) => removeField("responseFields", id)}
+        />
       </Fieldset>
 
       <MappingEditor sections={spec.mappingSections} onChange={(mappingSections) => patch({ mappingSections })} />
@@ -249,7 +259,7 @@ function ServiceErrorRow({
 
 function MappingEditor({ sections, onChange }: { sections: MappingSection[]; onChange: (sections: MappingSection[]) => void }) {
   return (
-    <Fieldset title="Mapping">
+    <Fieldset title="Field to Field Mapping">
       <button type="button" onClick={() => onChange([...sections, { id: uid(), name: "", rows: [] }])}><Plus size={16} /> Add Mapping Section</button>
       {sections.map((section) => (
         <div className="subgroup" key={section.id}>
@@ -257,6 +267,14 @@ function MappingEditor({ sections, onChange }: { sections: MappingSection[]; onC
             <input value={section.name} placeholder="Mapping section name" onChange={(event) => onChange(sections.map((item) => item.id === section.id ? { ...item, name: event.target.value } : item))} />
             <IconButton label="Remove mapping section" onClick={() => onChange(sections.filter((item) => item.id !== section.id))} />
           </div>
+          {section.rows.length > 0 && (
+            <div className="table-header mapping-row" aria-hidden="true">
+              <span>Target</span>
+              <span>From</span>
+              <span>Description</span>
+              <span />
+            </div>
+          )}
           {section.rows.map((row) => (
             <div className="row mapping-row" key={row.id}>
               <input value={row.target} placeholder="target_field" onChange={(event) => onChange(sections.map((item) => item.id === section.id ? { ...item, rows: item.rows.map((entry) => entry.id === row.id ? { ...entry, target: event.target.value } : entry) } : item))} />
