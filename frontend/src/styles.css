@@ -327,6 +327,44 @@ textarea:focus {
   gap: 8px;
 }
 
+.switch-button {
+  gap: 9px;
+  background: #eef2f4;
+}
+
+.switch-button.on {
+  border-color: var(--accent);
+  color: var(--accent-strong);
+  background: rgba(15, 118, 110, 0.1);
+}
+
+.switch-track {
+  position: relative;
+  width: 34px;
+  height: 18px;
+  border-radius: 999px;
+  background: #b9c4cc;
+}
+
+.switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: #ffffff;
+  transition: transform 140ms ease;
+}
+
+.switch-button.on .switch-track {
+  background: var(--accent);
+}
+
+.switch-button.on .switch-thumb {
+  transform: translateX(16px);
+}
+
 .columns {
   display: grid;
   grid-template-columns: minmax(300px, 0.75fr) minmax(460px, 1.2fr) minmax(420px, 1fr);
@@ -339,6 +377,10 @@ textarea:focus {
   grid-template-columns: minmax(520px, 1.25fr) minmax(420px, 0.9fr);
   gap: 14px;
   align-items: start;
+}
+
+.service-editor-layout.display-off {
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .panel {

@@ -265,6 +265,7 @@ function App() {
   const [selectedProjectId, setSelectedProjectId] = useState(() => loadStore().projects[0]?.id ?? "");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [page, setPage] = useState<Page>("services");
+  const [showDisplay, setShowDisplay] = useState(true);
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const markdown = useMemo(() => selectedService ? serviceMarkdown(selectedService.spec) : "", [selectedService]);
@@ -407,15 +408,21 @@ function App() {
                 <p className="eyebrow">projects / {selectedProject.name}</p>
                 <h2>{selectedProject.name}</h2>
               </div>
-              <div className="toolbar">
-                <button className={page === "services" ? "active-tab" : ""} type="button" onClick={() => setPage("services")}><FilePlus2 size={16} /> Services</button>
-                <button className={page === "eventCodes" ? "active-tab" : ""} type="button" onClick={() => setPage("eventCodes")}><ListPlus size={16} /> Event Codes</button>
-                <button className={page === "errorCodes" ? "active-tab" : ""} type="button" onClick={() => setPage("errorCodes")}><ListPlus size={16} /> Error Codes</button>
-              </div>
+              {page === "services" && (
+                <button
+                  className={showDisplay ? "switch-button on" : "switch-button"}
+                  type="button"
+                  aria-pressed={showDisplay}
+                  onClick={() => setShowDisplay((current) => !current)}
+                >
+                  <span className="switch-track"><span className="switch-thumb" /></span>
+                  Display
+                </button>
+              )}
             </header>
 
             {page === "services" && (
-              <div className="service-editor-layout">
+              <div className={showDisplay ? "service-editor-layout" : "service-editor-layout display-off"}>
                 <section className="panel editor-panel">
                   {selectedService ? (
                     <ServiceEditor spec={selectedService.spec} onChange={updateServiceSpec} />
@@ -428,18 +435,20 @@ function App() {
                   )}
                 </section>
 
-                <section className="panel preview-panel">
-                  <div className="panel-title">
-                    <h3>Generated Markdown</h3>
-                    <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
-                  </div>
-                  <pre>{markdown || "Select a service to preview the spec."}</pre>
-                  <div className="panel-title schema-title">
-                    <h3>Stored JSON</h3>
-                    <span>localStorage key: {STORAGE_KEY}</span>
-                  </div>
-                  <pre className="schema-preview">{schemaPreview}</pre>
-                </section>
+                {showDisplay && (
+                  <section className="panel preview-panel">
+                    <div className="panel-title">
+                      <h3>Generated Markdown</h3>
+                      <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
+                    </div>
+                    <pre>{markdown || "Select a service to preview the spec."}</pre>
+                    <div className="panel-title schema-title">
+                      <h3>Stored JSON</h3>
+                      <span>localStorage key: {STORAGE_KEY}</span>
+                    </div>
+                    <pre className="schema-preview">{schemaPreview}</pre>
+                  </section>
+                )}
               </div>
             )}
 
