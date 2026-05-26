@@ -29,7 +29,10 @@ function App() {
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
-  const markdown = useMemo(() => selectedService ? serviceMarkdown(selectedService.spec) : "", [selectedService]);
+  const markdown = useMemo(
+    () => selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
+    [selectedProject?.error_code, selectedService],
+  );
 
   const refreshStore = useCallback(async () => {
     const snapshot = await localStorageProjectStore.getSnapshot();
@@ -213,6 +216,7 @@ function App() {
                   {selectedService ? (
                     <ServiceEditor
                       spec={selectedService.spec}
+                      projectErrorCodes={selectedProject.error_code}
                       showPreview={showDisplay}
                       onTogglePreview={() => setShowDisplay((current) => !current)}
                       onChange={updateServiceSpec}

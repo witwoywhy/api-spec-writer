@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import type { FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
+import type { ErrorCode, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { Fieldset, IconButton, Label } from "./ui";
 
@@ -11,11 +11,13 @@ const REQUIRED: RequireFlag[] = ["YES", "NO"];
 
 export function ServiceEditor({
   spec,
+  projectErrorCodes,
   showPreview,
   onTogglePreview,
   onChange,
 }: {
   spec: ServiceSpec;
+  projectErrorCodes: ErrorCode[];
   showPreview: boolean;
   onTogglePreview: () => void;
   onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void;
@@ -92,16 +94,48 @@ export function ServiceEditor({
       </Fieldset>
 
       <Fieldset title="Errors">
-        {spec.errors.map((row) => (
-          <div className="row error-row" key={row.id}>
-            <input value={row.status} placeholder="HTTP" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, status: event.target.value } : item) }))} />
-            <input value={row.code} placeholder="040001" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, code: event.target.value } : item) }))} />
-            <input value={row.message_en} placeholder="message" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, message_en: event.target.value } : item) }))} />
-            <input value={row.description_en} placeholder="when this happens" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, description_en: event.target.value } : item) }))} />
-            <IconButton label="Remove error" onClick={() => onChange((current) => ({ ...current, errors: current.errors.filter((item) => item.id !== row.id) }))} />
+        {spec.errors.length > 0 && (
+          <div className="table-header error-row">
+            <span>HTTP</span>
+            <span>Code</span>
+            <span>Message EN</span>
+            <span>Description EN</span>
+            <span>Message TH</span>
+            <span>Description TH</span>
+            <span />
           </div>
+        )}
+        {spec.errors.map((row) => (
+          <ServiceErrorRow
+            key={row.id}
+            row={row}
+            projectErrorCodes={projectErrorCodes}
+            onSelect={(errorCodeId) => {
+              const selected = projectErrorCodes.find((errorCode) => errorCode.id === errorCodeId);
+              if (!selected) return;
+              onChange((current) => ({
+                ...current,
+                errors: current.errors.map((item) => item.id === row.id ? { ...selected, id: item.id, errorCodeId: selected.id } : item),
+              }));
+            }}
+            onRemove={() => onChange((current) => ({ ...current, errors: current.errors.filter((item) => item.id !== row.id) }))}
+          />
         ))}
-        <button type="button" onClick={() => onChange((current) => ({ ...current, errors: [...current.errors, { id: uid(), domain: "general", status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" }] }))}><Plus size={16} /> Add Error</button>
+        <button
+          type="button"
+          onClick={() => {
+            const errorCode = projectErrorCodes[0];
+            onChange((current) => ({
+              ...current,
+              errors: [
+                ...current.errors,
+                errorCode ? { ...errorCode, id: uid(), errorCodeId: errorCode.id } : { id: uid(), domain: "general", status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" },
+              ],
+            }));
+          }}
+        >
+          <Plus size={16} /> Add Error
+        </button>
       </Fieldset>
 
       <Fieldset title="Response">
@@ -177,6 +211,38 @@ function FieldRows({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ServiceErrorRow({
+  row,
+  projectErrorCodes,
+  onSelect,
+  onRemove,
+}: {
+  row: ErrorCode;
+  projectErrorCodes: ErrorCode[];
+  onSelect: (errorCodeId: string) => void;
+  onRemove: () => void;
+}) {
+  const selectedErrorCode = projectErrorCodes.find((errorCode) => errorCode.id === row.errorCodeId) ?? projectErrorCodes.find((errorCode) => errorCode.code === row.code);
+  const resolved = selectedErrorCode ?? row;
+
+  return (
+    <div className="row error-row">
+      <input value={resolved.status} placeholder="HTTP" readOnly />
+      <select value={selectedErrorCode?.id ?? ""} onChange={(event) => onSelect(event.target.value)}>
+        <option value="" disabled>{resolved.code || "Select error"}</option>
+        {projectErrorCodes.map((errorCode) => (
+          <option key={errorCode.id} value={errorCode.id}>{errorCode.code}</option>
+        ))}
+      </select>
+      <input value={resolved.message_en} placeholder="message" readOnly />
+      <input value={resolved.description_en} placeholder="when this happens" readOnly />
+      <input value={resolved.message_th} placeholder="ข้อความภาษาไทย" readOnly />
+      <input value={resolved.description_th} placeholder="รายละเอียดภาษาไทย" readOnly />
+      <IconButton label="Remove error" onClick={onRemove} />
     </div>
   );
 }

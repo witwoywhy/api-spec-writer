@@ -1,4 +1,4 @@
-import type { FieldRow, RequestLocation, ResponseLocation, ServiceSpec } from "../domain";
+import type { ErrorCode, FieldRow, RequestLocation, ResponseLocation, ServiceSpec } from "../domain";
 
 const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
 const RESPONSE_LOCATIONS: ResponseLocation[] = ["HEADER", "BODY"];
@@ -20,7 +20,7 @@ function fieldTable(rows: FieldRow[]) {
   ].join("\n");
 }
 
-export function serviceMarkdown(spec: ServiceSpec) {
+export function serviceMarkdown(spec: ServiceSpec, projectErrorCodes: ErrorCode[] = []) {
   const serviceType = spec.type ?? "http";
   const requestParts = ["## Request"];
   for (const location of REQUEST_LOCATIONS) {
@@ -45,7 +45,10 @@ export function serviceMarkdown(spec: ServiceSpec) {
   }
 
   const errorRows = spec.errors.length
-    ? spec.errors.map((row) => `| ${escapePipe(row.status)} | ${code(escapePipe(row.code))} | ${escapePipe(row.message_en || row.message_th)} | ${escapePipe(row.description_en || row.description_th)} |`).join("\n")
+    ? spec.errors.map((row) => {
+        const error = resolveServiceError(row, projectErrorCodes);
+        return `| ${escapePipe(error.status)} | ${code(escapePipe(error.code))} | ${escapePipe(error.message_en || error.message_th)} | ${escapePipe(error.description_en || error.description_th)} |`;
+      }).join("\n")
     : "|  |  |  |  |";
 
   const mapping = spec.mappingSections.filter((section) => section.rows.length > 0);
@@ -102,4 +105,10 @@ ${mappingParts}
 - Mapping tables explain all integration, database, and response field transformations.
 - Nested fields use dot notation and arrays use \`[]\`.
 `;
+}
+
+function resolveServiceError(row: ErrorCode, projectErrorCodes: ErrorCode[]) {
+  return projectErrorCodes.find((errorCode) => errorCode.id === row.errorCodeId)
+    ?? projectErrorCodes.find((errorCode) => errorCode.code === row.code)
+    ?? row;
 }

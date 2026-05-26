@@ -328,6 +328,7 @@ function normalizeErrorCodeRow(errorCode: LegacyErrorCode & { projectId: string 
 function normalizeErrorCode(errorCode: LegacyErrorCode): ErrorCode {
   return {
     id: errorCode.id,
+    errorCodeId: errorCode.errorCodeId,
     domain: errorCode.domain ?? "general",
     status: errorCode.status,
     code: errorCode.code,

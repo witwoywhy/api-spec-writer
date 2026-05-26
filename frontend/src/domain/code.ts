@@ -1,5 +1,6 @@
 export type ErrorCode = {
   id: string;
+  errorCodeId?: string;
   domain: string;
   status: string;
   code: string;
