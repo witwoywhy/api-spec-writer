@@ -15,91 +15,26 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { localStorageProjectStore } from "./adaptors/projectStore";
+import type {
+  ErrorCode,
+  EventCode,
+  FieldRow,
+  HttpMethod,
+  MappingSection,
+  Project,
+  RequestLocation,
+  RequireFlag,
+  ResponseLocation,
+  Service,
+  ServiceSpec,
+  StoreDocument,
+} from "./domain/types";
 import "./styles.css";
-
-type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-type RequireFlag = "YES" | "NO";
-type RequestLocation = "HEADER" | "PATH PARAM" | "QUERY PARAM" | "BODY";
-type ResponseLocation = "HEADER" | "BODY";
-
-type FieldRow = {
-  id: string;
-  location: RequestLocation | ResponseLocation;
-  field: string;
-  type: string;
-  require: RequireFlag;
-  description: string;
-};
-
-type ErrorCode = {
-  id: string;
-  status: string;
-  code: string;
-  message: string;
-  description: string;
-};
-
-type EventCode = {
-  id: string;
-  code: string;
-  name: string;
-  description: string;
-};
-
-type MappingRow = {
-  id: string;
-  target: string;
-  from: string;
-  description: string;
-};
-
-type MappingSection = {
-  id: string;
-  name: string;
-  rows: MappingRow[];
-};
-
-type ServiceSpec = {
-  name: string;
-  method: HttpMethod;
-  url: string;
-  authentication: string;
-  description: string;
-  requestExample: string;
-  requestFields: FieldRow[];
-  sequence: string;
-  errors: ErrorCode[];
-  responseExample: string;
-  responseFields: FieldRow[];
-  mappingSections: MappingSection[];
-};
-
-type Service = {
-  id: string;
-  name: string;
-  spec: ServiceSpec;
-  updatedAt: string;
-};
-
-type Project = {
-  id: string;
-  name: string;
-  event_code: EventCode[];
-  error_code: ErrorCode[];
-  services: Service[];
-  createdAt: string;
-  updatedAt: string;
-};
-
-type StoreDocument = {
-  schemaVersion: 1;
-  projects: Project[];
-};
 
 type Page = "services" | "eventCodes" | "errorCodes";
 type MarkdownMode = "preview" | "raw";
 
-const STORAGE_KEY = "api-spec-writer-platform:v1";
 const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
 const RESPONSE_LOCATIONS: ResponseLocation[] = ["HEADER", "BODY"];
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
@@ -146,21 +81,6 @@ function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
       },
     ],
   };
-}
-
-function loadStore(): StoreDocument {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return { schemaVersion: 1, projects: [] };
-  try {
-    const parsed = JSON.parse(raw) as StoreDocument;
-    return { schemaVersion: 1, projects: Array.isArray(parsed.projects) ? parsed.projects : [] };
-  } catch {
-    return { schemaVersion: 1, projects: [] };
-  }
-}
-
-function saveStore(store: StoreDocument) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
 
 function escapePipe(value: string) {
@@ -263,7 +183,7 @@ ${mappingParts}
 }
 
 function App() {
-  const [initialStore] = useState(() => loadStore());
+  const [initialStore] = useState(() => localStorageProjectStore.load());
   const [store, setStore] = useState<StoreDocument>(initialStore);
   const [selectedProjectId, setSelectedProjectId] = useState(initialStore.projects[0]?.id ?? "");
   const [selectedServiceId, setSelectedServiceId] = useState("");
@@ -277,7 +197,7 @@ function App() {
   const commit = useCallback((updater: (current: StoreDocument) => StoreDocument) => {
     setStore((current) => {
       const next = updater(current);
-      saveStore(next);
+      localStorageProjectStore.save(next);
       return next;
     });
   }, []);
