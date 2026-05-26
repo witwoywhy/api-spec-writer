@@ -61,6 +61,18 @@ export function serviceMarkdown(spec: ServiceSpec, projectErrorCodes: ErrorCode[
         }),
       ].join("\n")
     : "## Field to Field Mapping\n\n_None._";
+  const headerRows = [
+    `| Name | ${escapePipe(spec.name || "[SERVICE OR USE CASE NAME]")} |`,
+    `| Type | ${escapePipe(serviceType)} |`,
+    ...(serviceType === "http"
+      ? [
+          `| Method | ${spec.method || "[HTTP METHOD]"} |`,
+          `| URL | ${code(escapePipe(spec.url || "[PATH]"))} |`,
+        ]
+      : []),
+    `| Authentication | ${escapePipe(spec.authentication || "[AUTH REQUIREMENT]")} |`,
+    `| Description | ${escapePipe(spec.description || "[WHAT THIS API DOES AND WHY]")} |`,
+  ].join("\n");
 
   return `# ${spec.name || "[SERVICE OR USE CASE NAME]"}
 
@@ -68,12 +80,7 @@ export function serviceMarkdown(spec: ServiceSpec, projectErrorCodes: ErrorCode[
 
 | Field | Value |
 |-------|-------|
-| Name | ${escapePipe(spec.name || "[SERVICE OR USE CASE NAME]")} |
-| Type | ${escapePipe(serviceType)} |
-${serviceType === "http" ? `| Method | ${spec.method || "[HTTP METHOD]"} |
-| URL | ${code(escapePipe(spec.url || "[PATH]"))} |` : ""}
-| Authentication | ${escapePipe(spec.authentication || "[AUTH REQUIREMENT]")} |
-| Description | ${escapePipe(spec.description || "[WHAT THIS API DOES AND WHY]")} |
+${headerRows}
 
 ${requestParts.join("\n")}
 
