@@ -601,6 +601,12 @@ label span {
   font-size: 13px;
 }
 
+.example-section {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
 .row {
   display: grid;
   gap: 8px;
@@ -617,6 +623,18 @@ label span {
 
 .field-row {
   grid-template-columns: 1fr 0.75fr 0.55fr 1.55fr 36px;
+}
+
+.field-row-header {
+  display: grid;
+  grid-template-columns: 1fr 0.75fr 0.55fr 1.55fr 36px;
+  gap: 8px;
+  align-items: center;
+  color: #43505a;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
 }
 
 .mapping-row {

@@ -28,6 +28,7 @@ import type {
   ResponseLocation,
   Service,
   ServiceSpec,
+  ServiceType,
   StoreDocument,
 } from "./domain";
 import "./styles.css";
@@ -38,6 +39,7 @@ type MarkdownMode = "preview" | "raw";
 const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
 const RESPONSE_LOCATIONS: ResponseLocation[] = ["HEADER", "BODY"];
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
+const SERVICE_TYPES: ServiceType[] = ["http", "publisher", "subscriber", "scheduler"];
 const REQUIRED: RequireFlag[] = ["YES", "NO"];
 
 const now = () => new Date().toISOString();
@@ -47,6 +49,7 @@ let mermaidInitialized = false;
 function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
   return {
     name,
+    type: "http",
     method: "POST",
     url: "/v1/transactions",
     authentication: "Bearer access token",
@@ -101,6 +104,7 @@ function fieldTable(rows: FieldRow[]) {
 }
 
 function serviceMarkdown(spec: ServiceSpec) {
+  const serviceType = spec.type ?? "http";
   const requestParts = ["## Request"];
   for (const location of REQUEST_LOCATIONS) {
     const rows = spec.requestFields.filter((row) => row.location === location);
@@ -140,13 +144,14 @@ function serviceMarkdown(spec: ServiceSpec) {
 
   return `# ${spec.name || "[SERVICE OR USE CASE NAME]"}
 
-## Spec Header
+## Header
 
 | Field | Value |
 |-------|-------|
 | Name | ${escapePipe(spec.name || "[SERVICE OR USE CASE NAME]")} |
-| Method | ${spec.method || "[HTTP METHOD]"} |
-| URL | ${code(escapePipe(spec.url || "[PATH]"))} |
+| Type | ${escapePipe(serviceType)} |
+${serviceType === "http" ? `| Method | ${spec.method || "[HTTP METHOD]"} |
+| URL | ${code(escapePipe(spec.url || "[PATH]"))} |` : ""}
 | Authentication | ${escapePipe(spec.authentication || "[AUTH REQUIREMENT]")} |
 | Description | ${escapePipe(spec.description || "[WHAT THIS API DOES AND WHY]")} |
 
@@ -259,7 +264,7 @@ function App() {
         <div className="brand">
           <Braces size={24} />
           <div>
-            <h1>API Spec Writer Platform</h1>
+            <h1>API Spec Writer</h1>
             <p>Local project tree for service specs.</p>
           </div>
         </div>
@@ -670,6 +675,7 @@ function ServiceEditor({
   onTogglePreview: () => void;
   onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void;
 }) {
+  const serviceType = spec.type ?? "http";
   const patch = (partial: Partial<ServiceSpec>) => onChange((current) => ({ ...current, ...partial }));
   const addField = (key: "requestFields" | "responseFields", location: RequestLocation | ResponseLocation) => {
     onChange((current) => ({
@@ -698,23 +704,42 @@ function ServiceEditor({
           Preview
         </button>
       </div>
-      <Fieldset title="Spec Header">
+      <Fieldset title="Header">
         <div className="grid two">
           <Label text="Name"><input value={spec.name} onChange={(event) => patch({ name: event.target.value })} /></Label>
-          <Label text="Method">
-            <select value={spec.method} onChange={(event) => patch({ method: event.target.value as HttpMethod })}>
-              {METHODS.map((method) => <option key={method}>{method}</option>)}
+          <Label text="Type">
+            <select value={serviceType} onChange={(event) => patch({ type: event.target.value as ServiceType })}>
+              {SERVICE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
             </select>
           </Label>
-          <Label text="URL"><input value={spec.url} onChange={(event) => patch({ url: event.target.value })} /></Label>
+          {serviceType === "http" && (
+            <>
+              <Label text="Method">
+                <select value={spec.method} onChange={(event) => patch({ method: event.target.value as HttpMethod })}>
+                  {METHODS.map((method) => <option key={method}>{method}</option>)}
+                </select>
+              </Label>
+              <Label text="URL"><input value={spec.url} onChange={(event) => patch({ url: event.target.value })} /></Label>
+            </>
+          )}
           <Label text="Authentication"><input value={spec.authentication} onChange={(event) => patch({ authentication: event.target.value })} /></Label>
           <Label text="Description" wide><textarea value={spec.description} onChange={(event) => patch({ description: event.target.value })} /></Label>
         </div>
       </Fieldset>
 
       <Fieldset title="Request">
-        <Label text="Example JSON or path/query"><textarea value={spec.requestExample} onChange={(event) => patch({ requestExample: event.target.value })} /></Label>
-        <FieldRows rows={spec.requestFields} locations={REQUEST_LOCATIONS} addLabel="Add Request Field" onAdd={(location) => addField("requestFields", location)} onUpdate={(id, row) => updateField("requestFields", id, row)} onRemove={(id) => removeField("requestFields", id)} />
+        <FieldRows
+          rows={spec.requestFields}
+          locations={REQUEST_LOCATIONS}
+          addLabel="Add Request Field"
+          exampleLocation="BODY"
+          exampleLabel="Example JSON or path/query"
+          exampleValue={spec.requestExample}
+          onExampleChange={(requestExample) => patch({ requestExample })}
+          onAdd={(location) => addField("requestFields", location)}
+          onUpdate={(id, row) => updateField("requestFields", id, row)}
+          onRemove={(id) => removeField("requestFields", id)}
+        />
       </Fieldset>
 
       <Fieldset title="Sequence Diagram">
@@ -751,6 +776,10 @@ function FieldRows({
   onAdd,
   onUpdate,
   onRemove,
+  exampleLocation,
+  exampleLabel,
+  exampleValue,
+  onExampleChange,
 }: {
   rows: FieldRow[];
   locations: (RequestLocation | ResponseLocation)[];
@@ -758,28 +787,51 @@ function FieldRows({
   onAdd: (location: RequestLocation | ResponseLocation) => void;
   onUpdate: (id: string, row: Partial<FieldRow>) => void;
   onRemove: (id: string) => void;
+  exampleLocation?: RequestLocation | ResponseLocation;
+  exampleLabel?: string;
+  exampleValue?: string;
+  onExampleChange?: (value: string) => void;
 }) {
   return (
     <div className="field-groups">
-      {locations.map((location) => (
-        <div className="subgroup" key={location}>
-          <div className="subgroup-title">
-            <h4>{location}</h4>
-            <button type="button" onClick={() => onAdd(location)}><Plus size={16} /> {addLabel}</button>
-          </div>
-          {rows.filter((row) => row.location === location).map((row) => (
-            <div className="row field-row" key={row.id}>
-              <input value={row.field} placeholder="field_name" onChange={(event) => onUpdate(row.id, { field: event.target.value })} />
-              <input value={row.type} placeholder="type" onChange={(event) => onUpdate(row.id, { type: event.target.value })} />
-              <select value={row.require} onChange={(event) => onUpdate(row.id, { require: event.target.value as RequireFlag })}>
-                {REQUIRED.map((option) => <option key={option}>{option}</option>)}
-              </select>
-              <input value={row.description} placeholder="validation, enum values, meaning" onChange={(event) => onUpdate(row.id, { description: event.target.value })} />
-              <IconButton label="Remove field" onClick={() => onRemove(row.id)} />
+      {locations.map((location) => {
+        const locationRows = rows.filter((row) => row.location === location);
+        return (
+          <div className="subgroup" key={location}>
+            <div className="subgroup-title">
+              <h4>{location}</h4>
+              <button type="button" onClick={() => onAdd(location)}><Plus size={16} /> {addLabel}</button>
             </div>
-          ))}
-        </div>
-      ))}
+            {locationRows.length > 0 && (
+              <div className="field-row-header field-row" aria-hidden="true">
+                <span>Field</span>
+                <span>Type</span>
+                <span>Required</span>
+                <span>Description</span>
+                <span />
+              </div>
+            )}
+            {locationRows.map((row) => (
+              <div className="row field-row" key={row.id}>
+                <input value={row.field} placeholder="field_name" onChange={(event) => onUpdate(row.id, { field: event.target.value })} />
+                <input value={row.type} placeholder="type" onChange={(event) => onUpdate(row.id, { type: event.target.value })} />
+                <select value={row.require} onChange={(event) => onUpdate(row.id, { require: event.target.value as RequireFlag })}>
+                  {REQUIRED.map((option) => <option key={option}>{option}</option>)}
+                </select>
+                <input value={row.description} placeholder="validation, enum values, meaning" onChange={(event) => onUpdate(row.id, { description: event.target.value })} />
+                <IconButton label="Remove field" onClick={() => onRemove(row.id)} />
+              </div>
+            ))}
+            {exampleLocation === location && onExampleChange && (
+              <div className="example-section">
+                <Label text={exampleLabel ?? "Example"}>
+                  <textarea value={exampleValue ?? ""} onChange={(event) => onExampleChange(event.target.value)} />
+                </Label>
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
