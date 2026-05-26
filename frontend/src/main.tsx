@@ -408,24 +408,18 @@ function App() {
                 <p className="eyebrow">projects / {selectedProject.name}</p>
                 <h2>{selectedProject.name}</h2>
               </div>
-              {page === "services" && (
-                <button
-                  className={showDisplay ? "switch-button on" : "switch-button"}
-                  type="button"
-                  aria-pressed={showDisplay}
-                  onClick={() => setShowDisplay((current) => !current)}
-                >
-                  <span className="switch-track"><span className="switch-thumb" /></span>
-                  Display
-                </button>
-              )}
             </header>
 
             {page === "services" && (
               <div className={showDisplay ? "service-editor-layout" : "service-editor-layout display-off"}>
                 <section className="panel editor-panel">
                   {selectedService ? (
-                    <ServiceEditor spec={selectedService.spec} onChange={updateServiceSpec} />
+                    <ServiceEditor
+                      spec={selectedService.spec}
+                      showPreview={showDisplay}
+                      onTogglePreview={() => setShowDisplay((current) => !current)}
+                      onChange={updateServiceSpec}
+                    />
                   ) : (
                     <div className="empty-state compact">
                       <FilePlus2 size={32} />
@@ -704,7 +698,17 @@ function ErrorCodesPage({ rows, onAdd, onChange }: { rows: ErrorCode[]; onAdd: (
   );
 }
 
-function ServiceEditor({ spec, onChange }: { spec: ServiceSpec; onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void }) {
+function ServiceEditor({
+  spec,
+  showPreview,
+  onTogglePreview,
+  onChange,
+}: {
+  spec: ServiceSpec;
+  showPreview: boolean;
+  onTogglePreview: () => void;
+  onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void;
+}) {
   const patch = (partial: Partial<ServiceSpec>) => onChange((current) => ({ ...current, ...partial }));
   const addField = (key: "requestFields" | "responseFields", location: RequestLocation | ResponseLocation) => {
     onChange((current) => ({
@@ -721,7 +725,18 @@ function ServiceEditor({ spec, onChange }: { spec: ServiceSpec; onChange: (updat
 
   return (
     <>
-      <div className="panel-title"><h3>Service Spec</h3><Save size={16} /></div>
+      <div className="panel-title">
+        <h3>Service Spec</h3>
+        <button
+          className={showPreview ? "switch-button on" : "switch-button"}
+          type="button"
+          aria-pressed={showPreview}
+          onClick={onTogglePreview}
+        >
+          <span className="switch-track"><span className="switch-thumb" /></span>
+          Preview
+        </button>
+      </div>
       <Fieldset title="Spec Header">
         <div className="grid two">
           <Label text="Name"><input value={spec.name} onChange={(event) => patch({ name: event.target.value })} /></Label>
