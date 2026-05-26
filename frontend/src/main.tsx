@@ -183,9 +183,8 @@ ${mappingParts}
 }
 
 function App() {
-  const [initialStore] = useState(() => localStorageProjectStore.load());
-  const [store, setStore] = useState<StoreDocument>(initialStore);
-  const [selectedProjectId, setSelectedProjectId] = useState(initialStore.projects[0]?.id ?? "");
+  const [store, setStore] = useState<StoreDocument>({ schemaVersion: 1, projects: [] });
+  const [selectedProjectId, setSelectedProjectId] = useState("");
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [page, setPage] = useState<Page>("services");
   const [showDisplay, setShowDisplay] = useState(true);
@@ -194,15 +193,17 @@ function App() {
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const markdown = useMemo(() => selectedService ? serviceMarkdown(selectedService.spec) : "", [selectedService]);
 
-  const commit = useCallback((updater: (current: StoreDocument) => StoreDocument) => {
-    setStore((current) => {
-      const next = updater(current);
-      localStorageProjectStore.save(next);
-      return next;
-    });
+  const refreshStore = useCallback(async () => {
+    const snapshot = await localStorageProjectStore.getSnapshot();
+    setStore(snapshot);
+    setSelectedProjectId((current) => current || (snapshot.projects[0]?.id ?? ""));
   }, []);
 
-  const createProject = () => {
+  useEffect(() => {
+    void refreshStore();
+  }, [refreshStore]);
+
+  const createProject = async () => {
     const name = window.prompt("Project name");
     if (!name?.trim()) return;
     const timestamp = now();
@@ -216,54 +217,40 @@ function App() {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    commit((current) => ({ ...current, projects: [...current.projects, project] }));
+    await localStorageProjectStore.createProject(project);
+    await refreshStore();
     setSelectedProjectId(project.id);
     setSelectedServiceId(service.id);
   };
 
-  const updateProject = (projectId: string, updater: (project: Project) => Project) => {
-    commit((current) => ({
-      ...current,
-      projects: current.projects.map((project) => project.id === projectId ? { ...updater(project), updatedAt: now() } : project),
-    }));
-  };
-
-  const addEventCode = () => {
+  const addEventCode = async () => {
     if (!selectedProject) return;
-    updateProject(selectedProject.id, (project) => ({
-      ...project,
-      event_code: [...project.event_code, { id: uid(), code: "", name: "", description: "" }],
-    }));
+    await localStorageProjectStore.createEventCode(selectedProject.id, { id: uid(), code: "", name: "", description: "" });
+    await refreshStore();
   };
 
-  const addErrorCode = () => {
+  const addErrorCode = async () => {
     if (!selectedProject) return;
-    updateProject(selectedProject.id, (project) => ({
-      ...project,
-      error_code: [...project.error_code, { id: uid(), status: "", code: "", message: "", description: "" }],
-    }));
+    await localStorageProjectStore.createErrorCode(selectedProject.id, { id: uid(), status: "", code: "", message: "", description: "" });
+    await refreshStore();
   };
 
-  const createService = (projectId = selectedProject?.id) => {
+  const createService = async (projectId = selectedProject?.id) => {
     if (!projectId) return;
     const name = window.prompt("Service name");
     if (!name?.trim()) return;
     const timestamp = now();
     const service: Service = { id: uid(), name: name.trim(), spec: createDefaultSpec(name.trim()), updatedAt: timestamp };
-    updateProject(projectId, (project) => ({ ...project, services: [...project.services, service] }));
+    await localStorageProjectStore.createService(projectId, service);
+    await refreshStore();
     setSelectedServiceId(service.id);
   };
 
-  const updateServiceSpec = (updater: (spec: ServiceSpec) => ServiceSpec) => {
+  const updateServiceSpec = async (updater: (spec: ServiceSpec) => ServiceSpec) => {
     if (!selectedProject || !selectedService) return;
-    updateProject(selectedProject.id, (project) => ({
-      ...project,
-      services: project.services.map((service) => {
-        if (service.id !== selectedService.id) return service;
-        const spec = updater(service.spec);
-        return { ...service, name: spec.name || service.name, spec, updatedAt: now() };
-      }),
-    }));
+    const spec = updater(selectedService.spec);
+    await localStorageProjectStore.updateServiceSpec(selectedProject.id, selectedService.id, spec);
+    await refreshStore();
   };
 
   return (
@@ -378,7 +365,10 @@ function App() {
               <EventCodesPage
                 rows={selectedProject.event_code}
                 onAdd={addEventCode}
-                onChange={(event_code) => updateProject(selectedProject.id, (project) => ({ ...project, event_code }))}
+                onChange={async (eventCodes) => {
+                  await localStorageProjectStore.replaceEventCodes(selectedProject.id, eventCodes);
+                  await refreshStore();
+                }}
               />
             )}
 
@@ -386,7 +376,10 @@ function App() {
               <ErrorCodesPage
                 rows={selectedProject.error_code}
                 onAdd={addErrorCode}
-                onChange={(error_code) => updateProject(selectedProject.id, (project) => ({ ...project, error_code }))}
+                onChange={async (errorCodes) => {
+                  await localStorageProjectStore.replaceErrorCodes(selectedProject.id, errorCodes);
+                  await refreshStore();
+                }}
               />
             )}
           </>
