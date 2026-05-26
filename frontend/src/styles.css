@@ -371,7 +371,7 @@ textarea:focus {
   top: 18px;
   max-height: calc(100vh - 36px);
   display: grid;
-  grid-template-rows: auto minmax(260px, 1fr) auto minmax(180px, 0.65fr);
+  grid-template-rows: auto minmax(260px, 1fr);
   overflow: hidden;
 }
 
@@ -389,10 +389,6 @@ textarea:focus {
   background: var(--surface-soft);
 }
 
-.schema-title {
-  border-top: 1px solid var(--line);
-}
-
 pre {
   margin: 0;
   padding: 14px;
@@ -404,8 +400,120 @@ pre {
   white-space: pre-wrap;
 }
 
-.schema-preview {
-  background: #1c252e;
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.segmented-control {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #eef2f4;
+  padding: 2px;
+}
+
+.segmented-control button {
+  min-height: 28px;
+  border: 0;
+  background: transparent;
+  padding: 4px 9px;
+}
+
+.segmented-control button.active {
+  background: var(--surface);
+  color: var(--accent-strong);
+  box-shadow: 0 1px 2px rgba(20, 31, 42, 0.14);
+}
+
+.markdown-preview {
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--surface);
+  color: var(--text);
+  line-height: 1.55;
+}
+
+.markdown-preview h1,
+.markdown-preview h2,
+.markdown-preview h3,
+.markdown-preview h4 {
+  margin: 18px 0 10px;
+  letter-spacing: 0;
+}
+
+.markdown-preview h1:first-child,
+.markdown-preview h2:first-child,
+.markdown-preview h3:first-child,
+.markdown-preview h4:first-child {
+  margin-top: 0;
+}
+
+.markdown-preview h1 {
+  font-size: 24px;
+}
+
+.markdown-preview h2 {
+  font-size: 19px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 6px;
+}
+
+.markdown-preview h3 {
+  font-size: 15px;
+}
+
+.markdown-preview p,
+.markdown-preview ul {
+  margin: 8px 0;
+}
+
+.markdown-preview code {
+  border-radius: 4px;
+  background: #eef2f4;
+  padding: 1px 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 0.92em;
+}
+
+.markdown-preview pre {
+  border-radius: 6px;
+  margin: 10px 0;
+}
+
+.markdown-preview pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+}
+
+.markdown-table-wrap {
+  overflow-x: auto;
+  margin: 10px 0 14px;
+}
+
+.markdown-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.markdown-preview th,
+.markdown-preview td {
+  border: 1px solid var(--line);
+  padding: 7px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.markdown-preview th {
+  background: var(--surface-soft);
+}
+
+.empty-preview {
+  color: var(--muted);
 }
 
 .fieldset {

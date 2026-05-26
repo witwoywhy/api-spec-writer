@@ -95,6 +95,7 @@ type StoreDocument = {
 };
 
 type Page = "services" | "eventCodes" | "errorCodes";
+type MarkdownMode = "preview" | "raw";
 
 const STORAGE_KEY = "api-spec-writer-platform:v1";
 const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
@@ -265,10 +266,10 @@ function App() {
   const [selectedServiceId, setSelectedServiceId] = useState("");
   const [page, setPage] = useState<Page>("services");
   const [showDisplay, setShowDisplay] = useState(true);
+  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("raw");
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const markdown = useMemo(() => selectedService ? serviceMarkdown(selectedService.spec) : "", [selectedService]);
-  const schemaPreview = useMemo(() => JSON.stringify(store, null, 2), [store]);
 
   const commit = useCallback((updater: (current: StoreDocument) => StoreDocument) => {
     setStore((current) => {
@@ -432,14 +433,19 @@ function App() {
                   <section className="panel preview-panel">
                     <div className="panel-title">
                       <h3>Generated Markdown</h3>
-                      <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
+                      <div className="preview-actions">
+                        <div className="segmented-control" aria-label="Markdown display mode">
+                          <button className={markdownMode === "preview" ? "active" : ""} type="button" onClick={() => setMarkdownMode("preview")}>Preview</button>
+                          <button className={markdownMode === "raw" ? "active" : ""} type="button" onClick={() => setMarkdownMode("raw")}>Raw</button>
+                        </div>
+                        <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
+                      </div>
                     </div>
-                    <pre>{markdown || "Select a service to preview the spec."}</pre>
-                    <div className="panel-title schema-title">
-                      <h3>Stored JSON</h3>
-                      <span>localStorage key: {STORAGE_KEY}</span>
-                    </div>
-                    <pre className="schema-preview">{schemaPreview}</pre>
+                    {markdownMode === "preview" ? (
+                      <MarkdownPreview markdown={markdown} />
+                    ) : (
+                      <pre>{markdown || "Select a service to preview the spec."}</pre>
+                    )}
                   </section>
                 )}
               </div>
@@ -595,6 +601,126 @@ function ProjectTree({
       </div>
     </section>
   );
+}
+
+function MarkdownPreview({ markdown }: { markdown: string }) {
+  if (!markdown.trim()) return <div className="markdown-preview empty-preview">Select a service to preview the spec.</div>;
+  const blocks = parseMarkdownBlocks(markdown);
+  return (
+    <div className="markdown-preview">
+      {blocks.map((block, index) => {
+        if (block.type === "heading") {
+          const Heading = `h${Math.min(block.level, 4)}` as "h1" | "h2" | "h3" | "h4";
+          return <Heading key={index}>{block.text}</Heading>;
+        }
+        if (block.type === "code") return <pre key={index}><code>{block.text}</code></pre>;
+        if (block.type === "list") return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(item)}</li>)}</ul>;
+        if (block.type === "table") {
+          return (
+            <div className="markdown-table-wrap" key={index}>
+              <table>
+                <thead>
+                  <tr>{block.headers.map((cell, cellIndex) => <th key={cellIndex}>{renderInlineMarkdown(cell)}</th>)}</tr>
+                </thead>
+                <tbody>
+                  {block.rows.map((row, rowIndex) => (
+                    <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{renderInlineMarkdown(cell)}</td>)}</tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return <p key={index}>{renderInlineMarkdown(block.text)}</p>;
+      })}
+    </div>
+  );
+}
+
+type MarkdownBlock =
+  | { type: "heading"; level: number; text: string }
+  | { type: "paragraph"; text: string }
+  | { type: "code"; text: string }
+  | { type: "list"; items: string[] }
+  | { type: "table"; headers: string[]; rows: string[][] };
+
+function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
+  const lines = markdown.split("\n");
+  const blocks: MarkdownBlock[] = [];
+  let index = 0;
+
+  while (index < lines.length) {
+    const line = lines[index];
+    if (!line.trim()) {
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith("```")) {
+      const codeLines: string[] = [];
+      index += 1;
+      while (index < lines.length && !lines[index].startsWith("```")) {
+        codeLines.push(lines[index]);
+        index += 1;
+      }
+      blocks.push({ type: "code", text: codeLines.join("\n") });
+      index += 1;
+      continue;
+    }
+
+    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
+    if (heading) {
+      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
+      index += 1;
+      continue;
+    }
+
+    if (line.startsWith("|") && lines[index + 1]?.startsWith("|")) {
+      const tableLines: string[] = [];
+      while (index < lines.length && lines[index].startsWith("|")) {
+        tableLines.push(lines[index]);
+        index += 1;
+      }
+      const [headerLine, , ...rowLines] = tableLines;
+      blocks.push({
+        type: "table",
+        headers: splitTableRow(headerLine),
+        rows: rowLines.map(splitTableRow),
+      });
+      continue;
+    }
+
+    if (line.startsWith("- ")) {
+      const items: string[] = [];
+      while (index < lines.length && lines[index].startsWith("- ")) {
+        items.push(lines[index].slice(2));
+        index += 1;
+      }
+      blocks.push({ type: "list", items });
+      continue;
+    }
+
+    const paragraphLines: string[] = [];
+    while (index < lines.length && lines[index].trim() && !lines[index].startsWith("#") && !lines[index].startsWith("|") && !lines[index].startsWith("- ") && !lines[index].startsWith("```")) {
+      paragraphLines.push(lines[index]);
+      index += 1;
+    }
+    blocks.push({ type: "paragraph", text: paragraphLines.join(" ") });
+  }
+
+  return blocks;
+}
+
+function splitTableRow(line: string) {
+  return line.split("|").slice(1, -1).map((cell) => cell.trim());
+}
+
+function renderInlineMarkdown(text: string) {
+  const parts = text.split(/(`[^`]+`)/g);
+  return parts.map((part, index) => {
+    if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
+    return <React.Fragment key={index}>{part}</React.Fragment>;
+  });
 }
 
 function EventCodesPage({ rows, onAdd, onChange }: { rows: EventCode[]; onAdd: () => void; onChange: (rows: EventCode[]) => void }) {
