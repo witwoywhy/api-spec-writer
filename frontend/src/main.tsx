@@ -1,5 +1,7 @@
-import React, { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   Braces,
   ChevronDown,
@@ -105,6 +107,7 @@ const REQUIRED: RequireFlag[] = ["YES", "NO"];
 
 const now = () => new Date().toISOString();
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+let mermaidInitialized = false;
 
 function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
   return {
@@ -605,122 +608,74 @@ function ProjectTree({
 
 function MarkdownPreview({ markdown }: { markdown: string }) {
   if (!markdown.trim()) return <div className="markdown-preview empty-preview">Select a service to preview the spec.</div>;
-  const blocks = parseMarkdownBlocks(markdown);
   return (
     <div className="markdown-preview">
-      {blocks.map((block, index) => {
-        if (block.type === "heading") {
-          const Heading = `h${Math.min(block.level, 4)}` as "h1" | "h2" | "h3" | "h4";
-          return <Heading key={index}>{block.text}</Heading>;
-        }
-        if (block.type === "code") return <pre key={index}><code>{block.text}</code></pre>;
-        if (block.type === "list") return <ul key={index}>{block.items.map((item, itemIndex) => <li key={itemIndex}>{renderInlineMarkdown(item)}</li>)}</ul>;
-        if (block.type === "table") {
-          return (
-            <div className="markdown-table-wrap" key={index}>
-              <table>
-                <thead>
-                  <tr>{block.headers.map((cell, cellIndex) => <th key={cellIndex}>{renderInlineMarkdown(cell)}</th>)}</tr>
-                </thead>
-                <tbody>
-                  {block.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex}>{row.map((cell, cellIndex) => <td key={cellIndex}>{renderInlineMarkdown(cell)}</td>)}</tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          );
-        }
-        return <p key={index}>{renderInlineMarkdown(block.text)}</p>;
-      })}
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          code({ className, children }) {
+            const code = String(children).replace(/\n$/, "");
+            if (className === "language-mermaid") return <MermaidDiagram chart={code} />;
+            return <code className={className}>{children}</code>;
+          },
+          pre({ children }) {
+            return <pre>{children}</pre>;
+          },
+          table({ children }) {
+            return <div className="markdown-table-wrap"><table>{children}</table></div>;
+          },
+        }}
+      >
+        {markdown}
+      </ReactMarkdown>
     </div>
   );
 }
 
-type MarkdownBlock =
-  | { type: "heading"; level: number; text: string }
-  | { type: "paragraph"; text: string }
-  | { type: "code"; text: string }
-  | { type: "list"; items: string[] }
-  | { type: "table"; headers: string[]; rows: string[][] };
+function MermaidDiagram({ chart }: { chart: string }) {
+  const reactId = useId();
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState("");
 
-function parseMarkdownBlocks(markdown: string): MarkdownBlock[] {
-  const lines = markdown.split("\n");
-  const blocks: MarkdownBlock[] = [];
-  let index = 0;
-
-  while (index < lines.length) {
-    const line = lines[index];
-    if (!line.trim()) {
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("```")) {
-      const codeLines: string[] = [];
-      index += 1;
-      while (index < lines.length && !lines[index].startsWith("```")) {
-        codeLines.push(lines[index]);
-        index += 1;
-      }
-      blocks.push({ type: "code", text: codeLines.join("\n") });
-      index += 1;
-      continue;
-    }
-
-    const heading = /^(#{1,6})\s+(.+)$/.exec(line);
-    if (heading) {
-      blocks.push({ type: "heading", level: heading[1].length, text: heading[2] });
-      index += 1;
-      continue;
-    }
-
-    if (line.startsWith("|") && lines[index + 1]?.startsWith("|")) {
-      const tableLines: string[] = [];
-      while (index < lines.length && lines[index].startsWith("|")) {
-        tableLines.push(lines[index]);
-        index += 1;
-      }
-      const [headerLine, , ...rowLines] = tableLines;
-      blocks.push({
-        type: "table",
-        headers: splitTableRow(headerLine),
-        rows: rowLines.map(splitTableRow),
+  useEffect(() => {
+    let active = true;
+    const diagramId = `mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+    import("mermaid")
+      .then(({ default: mermaid }) => {
+        if (!mermaidInitialized) {
+          mermaid.initialize({
+            startOnLoad: false,
+            securityLevel: "strict",
+            theme: "default",
+          });
+          mermaidInitialized = true;
+        }
+        return mermaid.render(diagramId, chart);
+      })
+      .then(({ svg }) => {
+        if (!active) return;
+        setSvg(svg);
+        setError("");
+      })
+      .catch((reason: unknown) => {
+        if (!active) return;
+        setSvg("");
+        setError(reason instanceof Error ? reason.message : "Unable to render Mermaid diagram.");
       });
-      continue;
-    }
+    return () => {
+      active = false;
+    };
+  }, [chart, reactId]);
 
-    if (line.startsWith("- ")) {
-      const items: string[] = [];
-      while (index < lines.length && lines[index].startsWith("- ")) {
-        items.push(lines[index].slice(2));
-        index += 1;
-      }
-      blocks.push({ type: "list", items });
-      continue;
-    }
-
-    const paragraphLines: string[] = [];
-    while (index < lines.length && lines[index].trim() && !lines[index].startsWith("#") && !lines[index].startsWith("|") && !lines[index].startsWith("- ") && !lines[index].startsWith("```")) {
-      paragraphLines.push(lines[index]);
-      index += 1;
-    }
-    blocks.push({ type: "paragraph", text: paragraphLines.join(" ") });
+  if (error) {
+    return (
+      <pre className="mermaid-error">
+        <code>{chart}</code>
+      </pre>
+    );
   }
-
-  return blocks;
-}
-
-function splitTableRow(line: string) {
-  return line.split("|").slice(1, -1).map((cell) => cell.trim());
-}
-
-function renderInlineMarkdown(text: string) {
-  const parts = text.split(/(`[^`]+`)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith("`") && part.endsWith("`")) return <code key={index}>{part.slice(1, -1)}</code>;
-    return <React.Fragment key={index}>{part}</React.Fragment>;
-  });
+  if (!svg) return <div className="mermaid-loading">Rendering diagram...</div>;
+  return <div className="mermaid-diagram" dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 function EventCodesPage({ rows, onAdd, onChange }: { rows: EventCode[]; onAdd: () => void; onChange: (rows: EventCode[]) => void }) {

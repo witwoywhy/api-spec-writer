@@ -512,6 +512,33 @@ pre {
   background: var(--surface-soft);
 }
 
+.mermaid-diagram {
+  margin: 12px 0;
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+}
+
+.mermaid-diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-loading {
+  margin: 12px 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--muted);
+  padding: 14px;
+}
+
+.mermaid-error {
+  border: 1px solid #f3c4c0;
+}
+
 .empty-preview {
   color: var(--muted);
 }
