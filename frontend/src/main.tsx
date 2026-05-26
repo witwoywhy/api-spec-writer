@@ -7,6 +7,7 @@ import { MarkdownPreview } from "./components/MarkdownPreview";
 import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
 import type { Project, Service, ServiceSpec, StoreDocument } from "./domain";
+import { buildAppPath, parseAppRoute } from "./lib/appRouter";
 import { uid } from "./lib/id";
 import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefaults";
 import { serviceMarkdown } from "./lib/serviceMarkdown";
@@ -15,12 +16,13 @@ import "./styles.css";
 type MarkdownMode = "preview" | "raw";
 
 const now = () => new Date().toISOString();
+const initialRoute = parseAppRoute(window.location.pathname);
 
 function App() {
   const [store, setStore] = useState<StoreDocument>({ schemaVersion: 1, projects: [] });
-  const [selectedProjectId, setSelectedProjectId] = useState("");
-  const [selectedServiceId, setSelectedServiceId] = useState("");
-  const [page, setPage] = useState<Page>("services");
+  const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId);
+  const [selectedServiceId, setSelectedServiceId] = useState(initialRoute.serviceId);
+  const [page, setPage] = useState<Page>(initialRoute.page);
   const [showDisplay, setShowDisplay] = useState(true);
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("raw");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
@@ -32,7 +34,16 @@ function App() {
   const refreshStore = useCallback(async () => {
     const snapshot = await localStorageProjectStore.getSnapshot();
     setStore(snapshot);
-    setSelectedProjectId((current) => current || (snapshot.projects[0]?.id ?? ""));
+    setSelectedProjectId((current) => {
+      if (snapshot.projects.some((project) => project.id === current)) return current;
+      return snapshot.projects[0]?.id ?? "";
+    });
+    setSelectedServiceId((current) => {
+      if (snapshot.projects.some((project) => project.services.some((service) => service.id === current))) return current;
+      const routeProject = snapshot.projects.find((project) => project.id === initialRoute.projectId);
+      if (routeProject?.services.some((service) => service.id === initialRoute.serviceId)) return initialRoute.serviceId;
+      return "";
+    });
     setOpenProjects((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
     setOpenServices((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
   }, []);
@@ -40,6 +51,26 @@ function App() {
   useEffect(() => {
     void refreshStore();
   }, [refreshStore]);
+
+  useEffect(() => {
+    const onPopState = () => {
+      const route = parseAppRoute(window.location.pathname);
+      setSelectedProjectId(route.projectId);
+      setSelectedServiceId(route.serviceId);
+      setPage(route.page);
+    };
+    window.addEventListener("popstate", onPopState);
+    return () => window.removeEventListener("popstate", onPopState);
+  }, []);
+
+  useEffect(() => {
+    const path = buildAppPath({
+      page,
+      projectId: selectedProject?.id ?? "",
+      serviceId: page === "services" ? (selectedService?.id ?? "") : "",
+    });
+    if (path !== window.location.pathname) window.history.pushState(null, "", path);
+  }, [page, selectedProject?.id, selectedService?.id]);
 
   const toggleProject = (projectId: string) => {
     setOpenProjects((current) => toggleSetValue(current, projectId));
