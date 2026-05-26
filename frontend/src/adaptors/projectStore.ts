@@ -1,4 +1,4 @@
-import type { StoreDocument } from "../domain/types";
+import type { StoreDocument } from "../domain";
 
 const STORAGE_KEY = "api-spec-writer-platform:v1";
 

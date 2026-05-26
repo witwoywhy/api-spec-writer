@@ -29,7 +29,7 @@ import type {
   Service,
   ServiceSpec,
   StoreDocument,
-} from "./domain/types";
+} from "./domain";
 import "./styles.css";
 
 type Page = "services" | "eventCodes" | "errorCodes";
