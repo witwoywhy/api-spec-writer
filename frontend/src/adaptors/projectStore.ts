@@ -1,4 +1,4 @@
-import type { ErrorCode, EventCode, Project, Service, ServiceSpec, StoreDocument } from "../domain";
+import type { ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, StoreDocument } from "../domain";
 
 const DOCUMENT_STORAGE_KEY = "api-spec-writer-platform:v1";
 const TABLE_STORAGE_KEY = "api-spec-writer-platform:tables:v1";
@@ -34,8 +34,30 @@ type ErrorCodeRow = ErrorCode & {
   projectId: string;
 };
 
+type LegacyErrorCode = Partial<ErrorCode> & {
+  id: string;
+  domain?: string;
+  status: string;
+  code: string;
+  message?: string;
+  description?: string;
+};
+
 type ServiceRow = Service & {
   projectId: string;
+};
+
+type LegacyServiceSpec = Omit<Partial<ServiceSpec>, "errors" | "type"> & {
+  name: string;
+  errors?: LegacyErrorCode[];
+  type?: ServiceType;
+};
+
+type LegacyService = Omit<Partial<Service>, "spec"> & {
+  id: string;
+  name: string;
+  spec: LegacyServiceSpec;
+  updatedAt: string;
 };
 
 type ProjectTableDocument = {
@@ -203,8 +225,8 @@ function normalizeTableDocument(tableDocument: ProjectTableDocument): ProjectTab
     tables: {
       projects: Array.isArray(tableDocument.tables?.projects) ? tableDocument.tables.projects : [],
       event_codes: Array.isArray(tableDocument.tables?.event_codes) ? tableDocument.tables.event_codes : [],
-      error_codes: Array.isArray(tableDocument.tables?.error_codes) ? tableDocument.tables.error_codes : [],
-      services: Array.isArray(tableDocument.tables?.services) ? tableDocument.tables.services : [],
+      error_codes: Array.isArray(tableDocument.tables?.error_codes) ? tableDocument.tables.error_codes.map(normalizeErrorCodeRow) : [],
+      services: Array.isArray(tableDocument.tables?.services) ? tableDocument.tables.services.map(normalizeServiceRow) : [],
     },
   };
 }
@@ -227,13 +249,13 @@ function storeToTableDocument(store: StoreDocument): ProjectTableDocument {
       ),
       error_codes: store.projects.flatMap((project) =>
         project.error_code.map((errorCode) => ({
-          ...errorCode,
+          ...normalizeErrorCode(errorCode),
           projectId: project.id,
         })),
       ),
       services: store.projects.flatMap((project) =>
         project.services.map((service) => ({
-          ...service,
+          ...normalizeService(service),
           projectId: project.id,
         })),
       ),
@@ -259,9 +281,59 @@ function tableRowsToProject(project: ProjectRow, tableDocument: ProjectTableDocu
       .map(({ projectId: _projectId, ...eventCode }) => eventCode),
     error_code: tableDocument.tables.error_codes
       .filter((errorCode) => errorCode.projectId === project.id)
-      .map(({ projectId: _projectId, ...errorCode }) => errorCode),
+      .map(({ projectId: _projectId, ...errorCode }) => normalizeErrorCode(errorCode)),
     services: tableDocument.tables.services
       .filter((service) => service.projectId === project.id)
-      .map(({ projectId: _projectId, ...service }) => service),
+      .map(({ projectId: _projectId, ...service }) => normalizeService(service)),
+  };
+}
+
+function normalizeServiceRow(service: LegacyService & { projectId: string }): ServiceRow {
+  return {
+    ...normalizeService(service),
+    projectId: service.projectId,
+  };
+}
+
+function normalizeService(service: LegacyService): Service {
+  return {
+    id: service.id,
+    name: service.name,
+    updatedAt: service.updatedAt,
+    spec: {
+      ...service.spec,
+      type: service.spec.type ?? "http",
+      method: service.spec.method ?? "GET",
+      url: service.spec.url ?? "",
+      authentication: service.spec.authentication ?? "",
+      description: service.spec.description ?? "",
+      requestExample: service.spec.requestExample ?? "",
+      requestFields: service.spec.requestFields ?? [],
+      sequence: service.spec.sequence ?? "",
+      errors: (service.spec.errors ?? []).map(normalizeErrorCode),
+      responseExample: service.spec.responseExample ?? "",
+      responseFields: service.spec.responseFields ?? [],
+      mappingSections: service.spec.mappingSections ?? [],
+    },
+  };
+}
+
+function normalizeErrorCodeRow(errorCode: LegacyErrorCode & { projectId: string }): ErrorCodeRow {
+  return {
+    ...normalizeErrorCode(errorCode),
+    projectId: errorCode.projectId,
+  };
+}
+
+function normalizeErrorCode(errorCode: LegacyErrorCode): ErrorCode {
+  return {
+    id: errorCode.id,
+    domain: errorCode.domain ?? "general",
+    status: errorCode.status,
+    code: errorCode.code,
+    message_th: errorCode.message_th ?? "",
+    description_th: errorCode.description_th ?? "",
+    message_en: errorCode.message_en ?? errorCode.message ?? "",
+    description_en: errorCode.description_en ?? errorCode.description ?? "",
   };
 }

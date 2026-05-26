@@ -46,6 +46,72 @@ const now = () => new Date().toISOString();
 const uid = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
 let mermaidInitialized = false;
 
+const DEFAULT_ERROR_CODES: Array<{ domain: string; status: string; code: string; message: string }> = [
+  { domain: "HTTP 3xx", status: "300", code: "3000300", message: "Multiple Choices" },
+  { domain: "HTTP 3xx", status: "301", code: "3000301", message: "Moved Permanently" },
+  { domain: "HTTP 3xx", status: "302", code: "3000302", message: "Found" },
+  { domain: "HTTP 3xx", status: "303", code: "3000303", message: "See Other" },
+  { domain: "HTTP 3xx", status: "304", code: "3000304", message: "Not Modified" },
+  { domain: "HTTP 3xx", status: "305", code: "3000305", message: "Use Proxy" },
+  { domain: "HTTP 3xx", status: "306", code: "3000306", message: "(Unused)" },
+  { domain: "HTTP 3xx", status: "307", code: "3000307", message: "Temporary Redirect" },
+  { domain: "HTTP 3xx", status: "308", code: "3000308", message: "Permanent Redirect" },
+  { domain: "HTTP 4xx", status: "400", code: "4000400", message: "Bad Request" },
+  { domain: "HTTP 4xx", status: "401", code: "4000401", message: "Unauthorized" },
+  { domain: "HTTP 4xx", status: "402", code: "4000402", message: "Payment Required" },
+  { domain: "HTTP 4xx", status: "403", code: "4000403", message: "Forbidden" },
+  { domain: "HTTP 4xx", status: "404", code: "4000404", message: "Not Found" },
+  { domain: "HTTP 4xx", status: "405", code: "4000405", message: "Method Not Allowed" },
+  { domain: "HTTP 4xx", status: "406", code: "4000406", message: "Not Acceptable" },
+  { domain: "HTTP 4xx", status: "407", code: "4000407", message: "Proxy Authentication Required" },
+  { domain: "HTTP 4xx", status: "408", code: "4000408", message: "Request Timeout" },
+  { domain: "HTTP 4xx", status: "409", code: "4000409", message: "Conflict" },
+  { domain: "HTTP 4xx", status: "410", code: "4000410", message: "Gone" },
+  { domain: "HTTP 4xx", status: "411", code: "4000411", message: "Length Required" },
+  { domain: "HTTP 4xx", status: "412", code: "4000412", message: "Precondition Failed" },
+  { domain: "HTTP 4xx", status: "413", code: "4000413", message: "Content Too Large" },
+  { domain: "HTTP 4xx", status: "414", code: "4000414", message: "URI Too Long" },
+  { domain: "HTTP 4xx", status: "415", code: "4000415", message: "Unsupported Media Type" },
+  { domain: "HTTP 4xx", status: "416", code: "4000416", message: "Range Not Satisfiable" },
+  { domain: "HTTP 4xx", status: "417", code: "4000417", message: "Expectation Failed" },
+  { domain: "HTTP 4xx", status: "418", code: "4000418", message: "(Unused)" },
+  { domain: "HTTP 4xx", status: "421", code: "4000421", message: "Misdirected Request" },
+  { domain: "HTTP 4xx", status: "422", code: "4000422", message: "Unprocessable Content" },
+  { domain: "HTTP 4xx", status: "423", code: "4000423", message: "Locked" },
+  { domain: "HTTP 4xx", status: "424", code: "4000424", message: "Failed Dependency" },
+  { domain: "HTTP 4xx", status: "425", code: "4000425", message: "Too Early" },
+  { domain: "HTTP 4xx", status: "426", code: "4000426", message: "Upgrade Required" },
+  { domain: "HTTP 4xx", status: "428", code: "4000428", message: "Precondition Required" },
+  { domain: "HTTP 4xx", status: "429", code: "4000429", message: "Too Many Requests" },
+  { domain: "HTTP 4xx", status: "431", code: "4000431", message: "Request Header Fields Too Large" },
+  { domain: "HTTP 4xx", status: "451", code: "4000451", message: "Unavailable For Legal Reasons" },
+  { domain: "HTTP 5xx", status: "500", code: "5000500", message: "Internal Server Error" },
+  { domain: "HTTP 5xx", status: "501", code: "5000501", message: "Not Implemented" },
+  { domain: "HTTP 5xx", status: "502", code: "5000502", message: "Bad Gateway" },
+  { domain: "HTTP 5xx", status: "503", code: "5000503", message: "Service Unavailable" },
+  { domain: "HTTP 5xx", status: "504", code: "5000504", message: "Gateway Timeout" },
+  { domain: "HTTP 5xx", status: "505", code: "5000505", message: "HTTP Version Not Supported" },
+  { domain: "HTTP 5xx", status: "506", code: "5000506", message: "Variant Also Negotiates" },
+  { domain: "HTTP 5xx", status: "507", code: "5000507", message: "Insufficient Storage" },
+  { domain: "HTTP 5xx", status: "508", code: "5000508", message: "Loop Detected" },
+  { domain: "HTTP 5xx", status: "510", code: "5000510", message: "Not Extended" },
+  { domain: "HTTP 5xx", status: "511", code: "5000511", message: "Network Authentication Required" },
+  { domain: "Custom", status: "500", code: "5009001", message: "(CUSTOM) Internal Integration Server Error" },
+];
+
+function createDefaultErrorCodes(): ErrorCode[] {
+  return DEFAULT_ERROR_CODES.map((errorCode) => ({
+    id: uid(),
+    domain: "General",
+    status: errorCode.status,
+    code: errorCode.code,
+    message_th: "",
+    description_th: "",
+    message_en: errorCode.message,
+    description_en: "",
+  }));
+}
+
 function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
   return {
     name,
@@ -63,8 +129,8 @@ function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
     ],
     sequence: "sequenceDiagram\n    participant request\n    participant service\n    participant db.transaction\n\n    request ->> service: POST /v1/transactions\n    service ->> db.transaction: insert transaction\n    db.transaction -->> service: response\n    service -->> request: response",
     errors: [
-      { id: uid(), status: "400", code: "040001", message: "invalid request", description: "Request validation fails" },
-      { id: uid(), status: "401", code: "040002", message: "unauthorized", description: "Token is missing or invalid" },
+      { id: uid(), domain: "general", status: "400", code: "040001", message_th: "", description_th: "", message_en: "invalid request", description_en: "Request validation fails" },
+      { id: uid(), domain: "general", status: "401", code: "040002", message_th: "", description_th: "", message_en: "unauthorized", description_en: "Token is missing or invalid" },
     ],
     responseExample: '{\n  "transaction_id": "a7d5e8ac-3d7c-4a9e-95c1-9129998a7c10"\n}',
     responseFields: [
@@ -86,8 +152,8 @@ function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
   };
 }
 
-function escapePipe(value: string) {
-  return value.replaceAll("|", "\\|").replaceAll("\n", "<br>");
+function escapePipe(value: unknown) {
+  return String(value ?? "").replaceAll("|", "\\|").replaceAll("\n", "<br>");
 }
 
 function code(value: string) {
@@ -128,7 +194,7 @@ function serviceMarkdown(spec: ServiceSpec) {
   }
 
   const errorRows = spec.errors.length
-    ? spec.errors.map((row) => `| ${escapePipe(row.status)} | ${code(escapePipe(row.code))} | ${escapePipe(row.message)} | ${escapePipe(row.description)} |`).join("\n")
+    ? spec.errors.map((row) => `| ${escapePipe(row.status)} | ${code(escapePipe(row.code))} | ${escapePipe(row.message_en || row.message_th)} | ${escapePipe(row.description_en || row.description_th)} |`).join("\n")
     : "|  |  |  |  |";
 
   const mapping = spec.mappingSections.filter((section) => section.rows.length > 0);
@@ -217,7 +283,7 @@ function App() {
       id: uid(),
       name: name.trim(),
       event_code: [],
-      error_code: [],
+      error_code: createDefaultErrorCodes(),
       services: [service],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -234,10 +300,16 @@ function App() {
     await refreshStore();
   };
 
-  const addErrorCode = async () => {
+  const addErrorCode = async (domain = "general") => {
     if (!selectedProject) return;
-    await localStorageProjectStore.createErrorCode(selectedProject.id, { id: uid(), status: "", code: "", message: "", description: "" });
+    await localStorageProjectStore.createErrorCode(selectedProject.id, { id: uid(), domain, status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" });
     await refreshStore();
+  };
+
+  const addErrorDomain = async () => {
+    const domain = window.prompt("Domain name");
+    if (!domain?.trim()) return;
+    await addErrorCode(domain.trim());
   };
 
   const createService = async (projectId = selectedProject?.id) => {
@@ -380,7 +452,8 @@ function App() {
             {page === "errorCodes" && (
               <ErrorCodesPage
                 rows={selectedProject.error_code}
-                onAdd={addErrorCode}
+                onAddDomain={addErrorDomain}
+                onAddErrorCode={addErrorCode}
                 onChange={async (errorCodes) => {
                   await localStorageProjectStore.replaceErrorCodes(selectedProject.id, errorCodes);
                   await refreshStore();
@@ -629,33 +702,90 @@ function EventCodesPage({ rows, onAdd, onChange }: { rows: EventCode[]; onAdd: (
   );
 }
 
-function ErrorCodesPage({ rows, onAdd, onChange }: { rows: ErrorCode[]; onAdd: () => void; onChange: (rows: ErrorCode[]) => void }) {
+function ErrorCodesPage({
+  rows,
+  onAddDomain,
+  onAddErrorCode,
+  onChange,
+}: {
+  rows: ErrorCode[];
+  onAddDomain: () => void;
+  onAddErrorCode: (domain?: string) => void;
+  onChange: (rows: ErrorCode[]) => void;
+}) {
+  const [collapsedDomains, setCollapsedDomains] = useState<Set<string>>(() => new Set());
   const update = (id: string, patch: Partial<ErrorCode>) => onChange(rows.map((row) => row.id === id ? { ...row, ...patch } : row));
+  const toggleDomain = (domain: string) => {
+    setCollapsedDomains((current) => {
+      const next = new Set(current);
+      if (next.has(domain)) next.delete(domain);
+      else next.add(domain);
+      return next;
+    });
+  };
+  const groups = rows.reduce<Array<{ domain: string; rows: ErrorCode[] }>>((items, row) => {
+    const domain = row.domain || "general";
+    const group = items.find((item) => item.domain === domain);
+    if (group) group.rows.push(row);
+    else items.push({ domain, rows: [row] });
+    return items;
+  }, []);
 
   return (
     <section className="panel code-page">
       <div className="panel-title page-title">
         <div>
           <h3>Error Codes</h3>
-          <span>Stored at project.error_code</span>
         </div>
-        <button className="primary" type="button" onClick={onAdd}><Plus size={16} /> Add Error Code</button>
-      </div>
-      <div className="table-header error-row">
-        <span>HTTP</span>
-        <span>Code</span>
-        <span>Message</span>
-        <span>Description</span>
-        <span />
+        <button className="primary" type="button" onClick={onAddDomain}><Plus size={16} /> Add Domain</button>
       </div>
       <div className="code-list">
-        {rows.map((row) => (
-          <div className="row error-row" key={row.id}>
-            <input value={row.status} placeholder="400" onChange={(event) => update(row.id, { status: event.target.value })} />
-            <input value={row.code} placeholder="040001" onChange={(event) => update(row.id, { code: event.target.value })} />
-            <input value={row.message} placeholder="invalid request" onChange={(event) => update(row.id, { message: event.target.value })} />
-            <input value={row.description} placeholder="When this error is returned" onChange={(event) => update(row.id, { description: event.target.value })} />
-            <IconButton label="Remove error code" onClick={() => onChange(rows.filter((item) => item.id !== row.id))} />
+        {groups.map((group) => (
+          <div className="code-group" key={group.domain}>
+            <div
+              className="code-group-title"
+              role="button"
+              tabIndex={0}
+              aria-expanded={!collapsedDomains.has(group.domain)}
+              onClick={() => toggleDomain(group.domain)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  toggleDomain(group.domain);
+                }
+              }}
+            >
+              <div className="domain-toggle">
+                {collapsedDomains.has(group.domain) ? <ChevronRight size={16} /> : <ChevronDown size={16} />}
+                <span>{group.domain}</span>
+                <small>{group.rows.length}</small>
+              </div>
+              <button type="button" onClick={(event) => { event.stopPropagation(); onAddErrorCode(group.domain); }}><Plus size={16} /> Add Error Code</button>
+            </div>
+            {!collapsedDomains.has(group.domain) && (
+              <>
+                <div className="table-header error-row">
+                  <span>HTTP</span>
+                  <span>Code</span>
+                  <span>Message TH</span>
+                  <span>Description TH</span>
+                  <span>Message EN</span>
+                  <span>Description EN</span>
+                  <span />
+                </div>
+                {group.rows.map((row) => (
+                  <div className="row error-row" key={row.id}>
+                    <input value={row.status} placeholder="400" onChange={(event) => update(row.id, { status: event.target.value })} />
+                    <input value={row.code} placeholder="040001" onChange={(event) => update(row.id, { code: event.target.value })} />
+                    <input value={row.message_th} placeholder="ข้อความภาษาไทย" onChange={(event) => update(row.id, { message_th: event.target.value })} />
+                    <input value={row.description_th} placeholder="รายละเอียดภาษาไทย" onChange={(event) => update(row.id, { description_th: event.target.value })} />
+                    <input value={row.message_en} placeholder="invalid request" onChange={(event) => update(row.id, { message_en: event.target.value })} />
+                    <input value={row.description_en} placeholder="When this error is returned" onChange={(event) => update(row.id, { description_en: event.target.value })} />
+                    <IconButton label="Remove error code" onClick={() => onChange(rows.filter((item) => item.id !== row.id))} />
+                  </div>
+                ))}
+              </>
+            )}
           </div>
         ))}
         {rows.length === 0 && <p className="empty code-empty">No error codes yet.</p>}
@@ -751,12 +881,12 @@ function ServiceEditor({
           <div className="row error-row" key={row.id}>
             <input value={row.status} placeholder="HTTP" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, status: event.target.value } : item) }))} />
             <input value={row.code} placeholder="040001" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, code: event.target.value } : item) }))} />
-            <input value={row.message} placeholder="message" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, message: event.target.value } : item) }))} />
-            <input value={row.description} placeholder="when this happens" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, description: event.target.value } : item) }))} />
+            <input value={row.message_en} placeholder="message" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, message_en: event.target.value } : item) }))} />
+            <input value={row.description_en} placeholder="when this happens" onChange={(event) => onChange((current) => ({ ...current, errors: current.errors.map((item) => item.id === row.id ? { ...item, description_en: event.target.value } : item) }))} />
             <IconButton label="Remove error" onClick={() => onChange((current) => ({ ...current, errors: current.errors.filter((item) => item.id !== row.id) }))} />
           </div>
         ))}
-        <button type="button" onClick={() => onChange((current) => ({ ...current, errors: [...current.errors, { id: uid(), status: "", code: "", message: "", description: "" }] }))}><Plus size={16} /> Add Error</button>
+        <button type="button" onClick={() => onChange((current) => ({ ...current, errors: [...current.errors, { id: uid(), domain: "general", status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" }] }))}><Plus size={16} /> Add Error</button>
       </Fieldset>
 
       <Fieldset title="Response">
