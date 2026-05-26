@@ -603,8 +603,24 @@ label span {
 
 .example-section {
   border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
   margin-top: 4px;
   padding-top: 12px;
+}
+
+.example-title {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.example-title span {
+  color: #43505a;
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
 }
 
 .row {

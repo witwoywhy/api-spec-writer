@@ -1,6 +1,7 @@
 import { Plus } from "lucide-react";
 import type { ErrorCode, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
+import { parseJsonFields } from "../lib/jsonFieldParser";
 import { Fieldset, IconButton, Label } from "./ui";
 
 const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
@@ -83,6 +84,7 @@ export function ServiceEditor({
           exampleLabel="Example JSON or path/query"
           exampleValue={spec.requestExample}
           onExampleChange={(requestExample) => patch({ requestExample })}
+          onParseExample={(fields) => onChange((current) => ({ ...current, requestFields: [...current.requestFields.filter((row) => row.location !== "BODY"), ...fields] }))}
           onAdd={(location) => addField("requestFields", location)}
           onUpdate={(id, row) => updateField("requestFields", id, row)}
           onRemove={(id) => removeField("requestFields", id)}
@@ -147,6 +149,7 @@ export function ServiceEditor({
           exampleLabel="Example JSON"
           exampleValue={spec.responseExample}
           onExampleChange={(responseExample) => patch({ responseExample })}
+          onParseExample={(fields) => onChange((current) => ({ ...current, responseFields: [...current.responseFields.filter((row) => row.location !== "BODY"), ...fields] }))}
           onAdd={(location) => addField("responseFields", location)}
           onUpdate={(id, row) => updateField("responseFields", id, row)}
           onRemove={(id) => removeField("responseFields", id)}
@@ -169,6 +172,7 @@ function FieldRows({
   exampleLabel,
   exampleValue,
   onExampleChange,
+  onParseExample,
 }: {
   rows: FieldRow[];
   locations: (RequestLocation | ResponseLocation)[];
@@ -180,6 +184,7 @@ function FieldRows({
   exampleLabel?: string;
   exampleValue?: string;
   onExampleChange?: (value: string) => void;
+  onParseExample?: (rows: FieldRow[]) => void;
 }) {
   return (
     <div className="field-groups">
@@ -213,9 +218,26 @@ function FieldRows({
             ))}
             {exampleLocation === location && onExampleChange && (
               <div className="example-section">
-                <Label text={exampleLabel ?? "Example"}>
-                  <textarea value={exampleValue ?? ""} onChange={(event) => onExampleChange(event.target.value)} />
-                </Label>
+                <div className="example-title">
+                  <span>{exampleLabel ?? "Example"}</span>
+                  {onParseExample && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!exampleValue?.trim()) return;
+                        try {
+                          const fields = parseJsonFields(exampleValue ?? "", location);
+                          if (fields.length > 0) onParseExample(fields);
+                        } catch {
+                          window.alert("Example must be valid JSON.");
+                        }
+                      }}
+                    >
+                      Parse JSON
+                    </button>
+                  )}
+                </div>
+                <textarea value={exampleValue ?? ""} onChange={(event) => onExampleChange(event.target.value)} />
               </div>
             )}
           </div>
