@@ -320,13 +320,13 @@ function App() {
     }));
   };
 
-  const createService = () => {
-    if (!selectedProject) return;
+  const createService = (projectId = selectedProject?.id) => {
+    if (!projectId) return;
     const name = window.prompt("Service name");
     if (!name?.trim()) return;
     const timestamp = now();
     const service: Service = { id: uid(), name: name.trim(), spec: createDefaultSpec(name.trim()), updatedAt: timestamp };
-    updateProject(selectedProject.id, (project) => ({ ...project, services: [...project.services, service] }));
+    updateProject(projectId, (project) => ({ ...project, services: [...project.services, service] }));
     setSelectedServiceId(service.id);
   };
 
@@ -380,6 +380,11 @@ function App() {
             setSelectedServiceId(project.services[0]?.id ?? "");
             setPage("services");
           }}
+          onCreateService={(project) => {
+            setSelectedProjectId(project.id);
+            setPage("services");
+            createService(project.id);
+          }}
           onSelectService={(project, service) => {
             setSelectedProjectId(project.id);
             setSelectedServiceId(service.id);
@@ -410,16 +415,7 @@ function App() {
             </header>
 
             {page === "services" && (
-              <div className="columns">
-                <section className="panel project-panel">
-                  <ServiceList
-                    project={selectedProject}
-                    selectedServiceId={selectedService?.id ?? ""}
-                    onCreateService={createService}
-                    onSelectService={setSelectedServiceId}
-                  />
-                </section>
-
+              <div className="service-editor-layout">
                 <section className="panel editor-panel">
                   {selectedService ? (
                     <ServiceEditor spec={selectedService.spec} onChange={updateServiceSpec} />
@@ -427,7 +423,7 @@ function App() {
                     <div className="empty-state compact">
                       <FilePlus2 size={32} />
                       <h2>No service yet</h2>
-                      <button className="primary" type="button" onClick={createService}>Create Service</button>
+                      <button className="primary" type="button" onClick={() => createService()}>Create Service</button>
                     </div>
                   )}
                 </section>
@@ -478,6 +474,7 @@ function ProjectTree({
   onSelectEventCodes,
   onSelectErrorCodes,
   onSelectServices,
+  onCreateService,
   onSelectService,
 }: {
   projects: Project[];
@@ -488,6 +485,7 @@ function ProjectTree({
   onSelectEventCodes: (project: Project) => void;
   onSelectErrorCodes: (project: Project) => void;
   onSelectServices: (project: Project) => void;
+  onCreateService: (project: Project) => void;
   onSelectService: (project: Project, service: Service) => void;
 }) {
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set(projects.map((project) => project.id)));
@@ -555,6 +553,25 @@ function ProjectTree({
                     {servicesOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
                     <span>services</span>
                     <small>{project.services.length}</small>
+                    <span
+                      className="tree-add"
+                      role="button"
+                      tabIndex={0}
+                      title="Create service"
+                      aria-label="Create service"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCreateService(project);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onCreateService(project);
+                      }}
+                    >
+                      <Plus size={13} />
+                    </span>
                   </button>
                   {servicesOpen && (
                     <div className="tree-children nested">
