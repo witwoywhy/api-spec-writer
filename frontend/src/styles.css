@@ -200,6 +200,7 @@ textarea:focus {
   position: relative;
   width: 100%;
   min-height: 28px;
+  display: flex;
   justify-content: start;
   gap: 7px;
   border-color: transparent;
@@ -222,19 +223,25 @@ textarea:focus {
 
 .tree-row span {
   min-width: 0;
+}
+
+.tree-row > span:not(.tree-action):not(.tree-add) {
+  flex: 1 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .tree-row small {
-  margin-left: auto;
+  flex: 0 0 auto;
   color: #9fb0b8;
   font-size: 12px;
   font-weight: 800;
 }
 
 .tree-add {
+  flex: 0 0 auto;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -249,6 +256,32 @@ textarea:focus {
 
 .tree-add:hover {
   background: rgba(20, 184, 166, 0.28);
+}
+
+.tree-action {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid rgba(191, 208, 214, 0.22);
+  border-radius: 5px;
+  color: #d8e4e8;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tree-action:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tree-action.danger {
+  border-color: rgba(248, 113, 113, 0.34);
+  color: #fecaca;
+}
+
+.tree-action.danger:hover {
+  background: rgba(127, 29, 29, 0.3);
 }
 
 .root-row {

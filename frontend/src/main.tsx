@@ -139,6 +139,25 @@ function App() {
     setSelectedServiceId(service.id);
   };
 
+  const renameProject = async (project: Project) => {
+    const name = window.prompt("Project name", project.name);
+    if (!name?.trim()) return;
+    await localStorageProjectStore.renameProject(project.id, name.trim());
+    await refreshStore();
+  };
+
+  const archiveProject = async (project: Project) => {
+    const confirmed = window.confirm(`Delete project "${project.name}"? It will be archived in local storage.`);
+    if (!confirmed) return;
+    await localStorageProjectStore.archiveProject(project.id);
+    const snapshot = await localStorageProjectStore.getSnapshot();
+    const nextProject = snapshot.projects[0];
+    setStore(snapshot);
+    setSelectedProjectId(nextProject?.id ?? "");
+    setSelectedServiceId(nextProject?.services[0]?.id ?? "");
+    setPage("services");
+  };
+
   const updateServiceSpec = async (updater: (spec: ServiceSpec) => ServiceSpec) => {
     if (!selectedProject || !selectedService) return;
     const spec = updater(selectedService.spec);
@@ -183,7 +202,6 @@ function App() {
       if (importProjectInputRef.current) importProjectInputRef.current.value = "";
     }
   };
-
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -226,6 +244,8 @@ function App() {
             setSelectedServiceId(project.services[0]?.id ?? "");
             setPage("services");
           }}
+          onRenameProject={renameProject}
+          onArchiveProject={archiveProject}
           onCreateService={(project) => {
             setSelectedProjectId(project.id);
             setPage("services");

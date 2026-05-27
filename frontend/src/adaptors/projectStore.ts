@@ -2,10 +2,13 @@ import type { ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, 
 
 const DOCUMENT_STORAGE_KEY = "api-spec-writer-platform:v1";
 const TABLE_STORAGE_KEY = "api-spec-writer-platform:tables:v1";
+const ARCHIVE_STORAGE_KEY = "api-spec-writer-platform:project-archive:v1";
 
 export type ProjectStoreAdaptor = {
   getSnapshot(): Promise<StoreDocument>;
   createProject(project: Project): Promise<Project>;
+  renameProject(projectId: string, name: string): Promise<Project>;
+  archiveProject(projectId: string): Promise<void>;
   createEventCode(projectId: string, eventCode: EventCode): Promise<EventCode>;
   replaceEventCodes(projectId: string, eventCodes: EventCode[]): Promise<EventCode[]>;
   createErrorCode(projectId: string, errorCode: ErrorCode): Promise<ErrorCode>;
@@ -98,6 +101,28 @@ export const localStorageProjectStore: ProjectStoreAdaptor = {
     tableDocument.tables.services.push(...project.services.map((service) => ({ ...service, projectId: project.id })));
     writeTableDocument(tableDocument);
     return project;
+  },
+
+  async renameProject(projectId, name) {
+    const tableDocument = readPersistedTableDocument();
+    const project = tableDocument.tables.projects.find((item) => item.id === projectId);
+    if (!project) throw new Error("Project not found");
+    project.name = name;
+    project.updatedAt = nowIso();
+    writeTableDocument(tableDocument);
+    return tableRowsToProject(project, tableDocument);
+  },
+
+  async archiveProject(projectId) {
+    const tableDocument = readPersistedTableDocument();
+    const project = tableDocument.tables.projects.find((item) => item.id === projectId);
+    if (!project) throw new Error("Project not found");
+    appendArchivedProject(tableRowsToProject(project, tableDocument));
+    tableDocument.tables.projects = tableDocument.tables.projects.filter((item) => item.id !== projectId);
+    tableDocument.tables.event_codes = tableDocument.tables.event_codes.filter((eventCode) => eventCode.projectId !== projectId);
+    tableDocument.tables.error_codes = tableDocument.tables.error_codes.filter((errorCode) => errorCode.projectId !== projectId);
+    tableDocument.tables.services = tableDocument.tables.services.filter((service) => service.projectId !== projectId);
+    writeTableDocument(tableDocument);
   },
 
   async createEventCode(projectId, eventCode) {
@@ -194,6 +219,23 @@ function readTableDocument() {
 
 function writeTableDocument(tableDocument: ProjectTableDocument) {
   localStorage.setItem(TABLE_STORAGE_KEY, JSON.stringify(tableDocument));
+}
+
+function appendArchivedProject(project: Project) {
+  const archived = readArchivedProjects();
+  archived.push({ ...project, archivedAt: nowIso() });
+  localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(archived));
+}
+
+function readArchivedProjects() {
+  const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
+  if (!raw) return [] as Array<Project & { archivedAt: string }>;
+  try {
+    const parsed = JSON.parse(raw) as Array<Project & { archivedAt: string }>;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
 }
 
 function touchProject(tableDocument: ProjectTableDocument, projectId: string) {

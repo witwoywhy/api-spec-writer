@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Code2, Folder, FolderOpen, Plus } from "lucide-react";
+import { ChevronDown, ChevronRight, Code2, Edit3, Folder, FolderOpen, Plus, Trash2 } from "lucide-react";
 import type { Project, Service } from "../domain";
 
 export type Page = "services" | "eventCodes" | "errorCodes";
@@ -16,6 +16,8 @@ export function ProjectTree({
   onSelectEventCodes,
   onSelectErrorCodes,
   onSelectServices,
+  onRenameProject,
+  onArchiveProject,
   onCreateService,
   onSelectService,
 }: {
@@ -31,6 +33,8 @@ export function ProjectTree({
   onSelectEventCodes: (project: Project) => void;
   onSelectErrorCodes: (project: Project) => void;
   onSelectServices: (project: Project) => void;
+  onRenameProject: (project: Project) => void;
+  onArchiveProject: (project: Project) => void;
   onCreateService: (project: Project) => void;
   onSelectService: (project: Project, service: Service) => void;
 }) {
@@ -55,6 +59,44 @@ export function ProjectTree({
                 {projectOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 {projectOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
                 <span>{project.name}</span>
+                <span
+                  className="tree-action"
+                  role="button"
+                  tabIndex={0}
+                  title="Edit project name"
+                  aria-label="Edit project name"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRenameProject(project);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onRenameProject(project);
+                  }}
+                >
+                  <Edit3 size={13} />
+                </span>
+                <span
+                  className="tree-action danger"
+                  role="button"
+                  tabIndex={0}
+                  title="Delete project"
+                  aria-label="Delete project"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onArchiveProject(project);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" && event.key !== " ") return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    onArchiveProject(project);
+                  }}
+                >
+                  <Trash2 size={13} />
+                </span>
               </button>
               {projectOpen && (
                 <div className="tree-children">
