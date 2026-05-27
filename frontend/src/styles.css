@@ -406,6 +406,18 @@ pre {
   gap: 8px;
 }
 
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.preview-select {
+  min-height: 34px;
+  width: 150px;
+}
+
 .segmented-control {
   display: inline-flex;
   border: 1px solid var(--line);

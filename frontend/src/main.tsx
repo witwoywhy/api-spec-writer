@@ -13,7 +13,7 @@ import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefault
 import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
 
-type MarkdownMode = "markdown" | "raw" | "html";
+type MarkdownMode = "markdown" | "raw" | "html" | "openapi";
 
 const now = () => new Date().toISOString();
 const initialRoute = parseAppRoute(window.location.pathname);
@@ -24,7 +24,7 @@ function App() {
   const [selectedServiceId, setSelectedServiceId] = useState(initialRoute.serviceId);
   const [page, setPage] = useState<Page>(initialRoute.page);
   const [showDisplay, setShowDisplay] = useState(true);
-  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("raw");
+  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("markdown");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
   const htmlExportRef = useRef<HTMLDivElement>(null);
@@ -150,6 +150,13 @@ function App() {
     const html = htmlExportRef.current?.innerHTML ?? "";
     downloadFile(`${exportBaseName}.html`, buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html), "text/html;charset=utf-8");
   };
+  const exportSelectedPreview = () => {
+    if (markdownMode === "html") {
+      exportHtml();
+      return;
+    }
+    exportMarkdown();
+  };
 
   return (
     <div className="app-shell">
@@ -245,16 +252,18 @@ function App() {
                 {showDisplay && (
                   <section className="panel preview-panel">
                     <div className="panel-title">
-                      <h3>Generated Markdown</h3>
+                      <div className="preview-title">
+                        <h3>Preview</h3>
+                        <select className="preview-select" value={markdownMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
+                          <option value="markdown">Markdown</option>
+                          <option value="raw">Raw Markdown</option>
+                          <option value="html">HTML</option>
+                          <option value="openapi" disabled>OpenAPI (wait implement)</option>
+                        </select>
+                      </div>
                       <div className="preview-actions">
-                        <div className="segmented-control" aria-label="Markdown display mode">
-                          <button className={markdownMode === "markdown" ? "active" : ""} type="button" onClick={() => setMarkdownMode("markdown")}>Markdown</button>
-                          <button className={markdownMode === "raw" ? "active" : ""} type="button" onClick={() => setMarkdownMode("raw")}>Raw</button>
-                          <button className={markdownMode === "html" ? "active" : ""} type="button" onClick={() => setMarkdownMode("html")}>HTML</button>
-                        </div>
                         <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
-                        <button type="button" onClick={exportMarkdown}><Download size={16} /> Markdown</button>
-                        <button type="button" onClick={exportHtml}><Download size={16} /> HTML</button>
+                        <button type="button" onClick={exportSelectedPreview}><Download size={16} /> Export</button>
                       </div>
                     </div>
                     {markdownMode === "markdown" ? (
