@@ -393,14 +393,43 @@ function normalizeService(service: LegacyService): Service {
       authentication: service.spec.authentication ?? "",
       description: service.spec.description ?? "",
       requestExample: service.spec.requestExample ?? "",
+      requestExamples: normalizeRequestExamples(service.spec),
       requestFields: service.spec.requestFields ?? [],
       sequence: service.spec.sequence ?? "",
       errors: (service.spec.errors ?? []).map(normalizeErrorCode),
       responseExample: service.spec.responseExample ?? "",
+      responseExamples: normalizeResponseExamples(service.spec),
       responseFields: service.spec.responseFields ?? [],
       mappingSections: service.spec.mappingSections ?? [],
     },
   };
+}
+
+function normalizeRequestExamples(spec: LegacyServiceSpec) {
+  if (Array.isArray(spec.requestExamples) && spec.requestExamples.length > 0) {
+    return spec.requestExamples.map((example) => ({
+      id: example.id,
+      name: example.name ?? "",
+      value: example.value ?? "",
+    }));
+  }
+  return spec.requestExample?.trim()
+    ? [{ id: "legacy-request-example", name: "Default", value: spec.requestExample }]
+    : [];
+}
+
+function normalizeResponseExamples(spec: LegacyServiceSpec) {
+  if (Array.isArray(spec.responseExamples) && spec.responseExamples.length > 0) {
+    return spec.responseExamples.map((example) => ({
+      id: example.id,
+      name: example.name ?? "",
+      status: example.status ?? "200",
+      value: example.value ?? "",
+    }));
+  }
+  return spec.responseExample?.trim()
+    ? [{ id: "legacy-response-example", name: "Success", status: "200", value: spec.responseExample }]
+    : [];
 }
 
 function normalizeErrorCodeRow(errorCode: LegacyErrorCode & { projectId: string }): ErrorCodeRow {

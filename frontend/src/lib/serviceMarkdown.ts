@@ -27,8 +27,10 @@ export function serviceMarkdown(spec: ServiceSpec, projectErrorCodes: ErrorCode[
     const rows = spec.requestFields.filter((row) => row.location === location);
     if (rows.length > 0) requestParts.push(`\n### ${location}\n\n${fieldTable(rows)}`);
   }
-  const requestBlock = spec.requestExample.trim().startsWith("{") || spec.requestExample.trim().startsWith("[") ? "json" : "text";
-  if (spec.requestExample.trim()) requestParts.push(`\nExample:\n\n\`\`\`${requestBlock}\n${spec.requestExample.trim()}\n\`\`\``);
+  for (const example of requestExamples(spec)) {
+    const requestBlock = example.value.trim().startsWith("{") || example.value.trim().startsWith("[") ? "json" : "text";
+    requestParts.push(`\n### Example: ${escapePipe(example.name || "Default")}\n\n\`\`\`${requestBlock}\n${example.value.trim()}\n\`\`\``);
+  }
 
   const responseParts = ["## Response"];
   let hasResponseRows = false;
@@ -40,8 +42,11 @@ export function serviceMarkdown(spec: ServiceSpec, projectErrorCodes: ErrorCode[
     }
   }
   if (!hasResponseRows) responseParts.push("\n_Response is empty._");
-  if (spec.responseExample.trim() && spec.responseFields.some((row) => row.location === "BODY")) {
-    responseParts.push(`\nExample:\n\n\`\`\`json\n${spec.responseExample.trim()}\n\`\`\``);
+  if (spec.responseFields.some((row) => row.location === "BODY")) {
+    for (const example of responseExamples(spec)) {
+      const responseBlock = example.value.trim().startsWith("{") || example.value.trim().startsWith("[") ? "json" : "text";
+      responseParts.push(`\n### Example: ${escapePipe(example.status ?? "200")} ${escapePipe(example.name || "Success")}\n\n\`\`\`${responseBlock}\n${example.value.trim()}\n\`\`\``);
+    }
   }
 
   const errorRows = spec.errors.length
@@ -118,4 +123,16 @@ function resolveServiceError(row: ErrorCode, projectErrorCodes: ErrorCode[]) {
   return projectErrorCodes.find((errorCode) => errorCode.id === row.errorCodeId)
     ?? projectErrorCodes.find((errorCode) => errorCode.code === row.code)
     ?? row;
+}
+
+function requestExamples(spec: ServiceSpec) {
+  const examples = (spec.requestExamples ?? []).filter((example) => example.value.trim());
+  if (examples.length > 0) return examples;
+  return spec.requestExample.trim() ? [{ id: "legacy-request-example", name: "Default", value: spec.requestExample }] : [];
+}
+
+function responseExamples(spec: ServiceSpec) {
+  const examples = (spec.responseExamples ?? []).filter((example) => example.value.trim());
+  if (examples.length > 0) return examples;
+  return spec.responseExample.trim() ? [{ id: "legacy-response-example", name: "Success", status: "200", value: spec.responseExample }] : [];
 }

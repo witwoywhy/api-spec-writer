@@ -76,6 +76,13 @@ export function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
     authentication: "Bearer access token",
     description: "Create a transaction verification request and return the generated transaction ID.",
     requestExample: '{\n  "type": "INTERBANK",\n  "from_account": "1234567890",\n  "to_account": "0987654321",\n  "amount": 500.00\n}',
+    requestExamples: [
+      {
+        id: uid(),
+        name: "Interbank",
+        value: '{\n  "type": "INTERBANK",\n  "from_account": "1234567890",\n  "to_account": "0987654321",\n  "amount": 500.00\n}',
+      },
+    ],
     requestFields: [
       { id: uid(), location: "BODY", field: "type", type: "string", require: "YES", description: "Enum: INTERBANK, INTRABANK" },
       { id: uid(), location: "BODY", field: "from_account", type: "string", require: "YES", description: "Source account number" },
@@ -88,6 +95,14 @@ export function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
       { id: uid(), domain: "general", status: "401", code: "040002", message_th: "", description_th: "", message_en: "unauthorized", description_en: "Token is missing or invalid" },
     ],
     responseExample: '{\n  "transaction_id": "a7d5e8ac-3d7c-4a9e-95c1-9129998a7c10"\n}',
+    responseExamples: [
+      {
+        id: uid(),
+        name: "Success",
+        status: "200",
+        value: '{\n  "transaction_id": "a7d5e8ac-3d7c-4a9e-95c1-9129998a7c10"\n}',
+      },
+    ],
     responseFields: [
       { id: uid(), location: "BODY", field: "transaction_id", type: "string", require: "YES", description: "Generated transaction UUID" },
     ],

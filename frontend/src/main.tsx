@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Clipboard, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeft, PanelRight, Trash2, Upload } from "lucide-react";
+import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeft, PanelRight, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
@@ -365,7 +365,6 @@ function App() {
                         </select>
                       </div>
                       <div className="preview-actions">
-                        <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
                         <button type="button" onClick={exportSelectedPreview}><Download size={16} /> Export</button>
                       </div>
                     </div>
@@ -519,6 +518,8 @@ function cloneImportedProject(project: Project): Project {
       updatedAt: timestamp,
       spec: {
         ...service.spec,
+        requestExamples: requestExamplesForImport(service.spec).map((example) => ({ ...example, id: uid() })),
+        responseExamples: responseExamplesForImport(service.spec).map((example) => ({ ...example, id: uid() })),
         requestFields: service.spec.requestFields.map((row) => ({ ...row, id: uid() })),
         responseFields: service.spec.responseFields.map((row) => ({ ...row, id: uid() })),
         errors: service.spec.errors.map((error) => ({
@@ -536,6 +537,16 @@ function cloneImportedProject(project: Project): Project {
     createdAt: timestamp,
     updatedAt: timestamp,
   };
+}
+
+function requestExamplesForImport(spec: ServiceSpec) {
+  if (Array.isArray(spec.requestExamples) && spec.requestExamples.length > 0) return spec.requestExamples;
+  return spec.requestExample?.trim() ? [{ id: "legacy-request-example", name: "Default", value: spec.requestExample }] : [];
+}
+
+function responseExamplesForImport(spec: ServiceSpec) {
+  if (Array.isArray(spec.responseExamples) && spec.responseExamples.length > 0) return spec.responseExamples;
+  return spec.responseExample?.trim() ? [{ id: "legacy-response-example", name: "Success", status: "200", value: spec.responseExample }] : [];
 }
 
 createRoot(document.getElementById("root")!).render(<App />);

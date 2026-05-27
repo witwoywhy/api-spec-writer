@@ -1,5 +1,5 @@
-import { Plus } from "lucide-react";
-import type { ErrorCode, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
+import { Edit3, Plus, Trash2 } from "lucide-react";
+import type { ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
 import { Fieldset, IconButton, Label } from "./ui";
@@ -9,6 +9,7 @@ const RESPONSE_LOCATIONS: ResponseLocation[] = ["HEADER", "BODY"];
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const SERVICE_TYPES: ServiceType[] = ["http", "publisher", "subscriber", "scheduler"];
 const REQUIRED: RequireFlag[] = ["YES", "NO"];
+const HTTP_STATUS_CODES = ["200", "201", "202", "204", "400", "401", "403", "404", "409", "422", "429", "500", "502", "503"];
 
 export function ServiceEditor({
   spec,
@@ -68,9 +69,9 @@ export function ServiceEditor({
           locations={REQUEST_LOCATIONS}
           addLabel="Add Request Field"
           exampleLocation="BODY"
-          exampleLabel="Example JSON or path/query"
-          exampleValue={spec.requestExample}
-          onExampleChange={(requestExample) => patch({ requestExample })}
+          exampleLabel="Request Examples"
+          examples={spec.requestExamples}
+          onExamplesChange={(requestExamples) => patch({ requestExamples, requestExample: requestExamples[0]?.value ?? "" })}
           onParseExample={(fields) => onChange((current) => ({ ...current, requestFields: [...current.requestFields.filter((row) => row.location !== "BODY"), ...fields] }))}
           onAdd={(location) => addField("requestFields", location)}
           onUpdate={(id, row) => updateField("requestFields", id, row)}
@@ -133,9 +134,10 @@ export function ServiceEditor({
           locations={RESPONSE_LOCATIONS}
           addLabel="Add Response Field"
           exampleLocation="BODY"
-          exampleLabel="Example JSON"
-          exampleValue={spec.responseExample}
-          onExampleChange={(responseExample) => patch({ responseExample })}
+          exampleLabel="Response Examples"
+          examples={spec.responseExamples}
+          includeStatus
+          onExamplesChange={(responseExamples) => patch({ responseExamples, responseExample: responseExamples[0]?.value ?? "" })}
           onParseExample={(fields) => onChange((current) => ({ ...current, responseFields: [...current.responseFields.filter((row) => row.location !== "BODY"), ...fields] }))}
           onAdd={(location) => addField("responseFields", location)}
           onUpdate={(id, row) => updateField("responseFields", id, row)}
@@ -158,7 +160,10 @@ function FieldRows({
   exampleLocation,
   exampleLabel,
   exampleValue,
+  examples,
+  includeStatus,
   onExampleChange,
+  onExamplesChange,
   onParseExample,
 }: {
   rows: FieldRow[];
@@ -170,7 +175,10 @@ function FieldRows({
   exampleLocation?: RequestLocation | ResponseLocation;
   exampleLabel?: string;
   exampleValue?: string;
+  examples?: ExampleCase[];
+  includeStatus?: boolean;
   onExampleChange?: (value: string) => void;
+  onExamplesChange?: (examples: ExampleCase[]) => void;
   onParseExample?: (rows: FieldRow[]) => void;
 }) {
   return (
@@ -203,7 +211,17 @@ function FieldRows({
                 <IconButton label="Remove field" onClick={() => onRemove(row.id)} />
               </div>
             ))}
-            {exampleLocation === location && onExampleChange && (
+            {exampleLocation === location && onExamplesChange && (
+              <ExampleCases
+                label={exampleLabel ?? "Examples"}
+                examples={examples ?? []}
+                location={location}
+                includeStatus={includeStatus}
+                onChange={onExamplesChange}
+                onParseExample={onParseExample}
+              />
+            )}
+            {exampleLocation === location && onExampleChange && !onExamplesChange && (
               <div className="example-section">
                 <div className="example-title">
                   <span>{exampleLabel ?? "Example"}</span>
@@ -230,6 +248,98 @@ function FieldRows({
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function ExampleCases({
+  label,
+  examples,
+  location,
+  includeStatus = false,
+  onChange,
+  onParseExample,
+}: {
+  label: string;
+  examples: ExampleCase[];
+  location: RequestLocation | ResponseLocation;
+  includeStatus?: boolean;
+  onChange: (examples: ExampleCase[]) => void;
+  onParseExample?: (rows: FieldRow[]) => void;
+}) {
+  const selectedExample = examples[0];
+  const updateExample = (id: string, patch: Partial<ExampleCase>) => {
+    onChange(examples.map((example) => example.id === id ? { ...example, ...patch } : example));
+  };
+  const selectExample = (id: string) => {
+    const selected = examples.find((example) => example.id === id);
+    if (selected) onChange([selected, ...examples.filter((example) => example.id !== id)]);
+  };
+
+  return (
+    <div className="example-section">
+      <div className="example-title">
+        <span>{label}</span>
+        <button
+          type="button"
+          onClick={() => {
+            const example = { id: uid(), name: includeStatus ? "Success" : `Case ${examples.length + 1}`, status: includeStatus ? "200" : undefined, value: "" };
+            onChange([example, ...examples]);
+          }}
+        >
+          <Plus size={16} /> Add Example
+        </button>
+      </div>
+      {selectedExample ? (
+        <div className="example-case">
+          <div className={includeStatus ? "example-case-title with-status" : "example-case-title"}>
+            {includeStatus && (
+              <select value={selectedExample.status ?? "200"} onChange={(event) => updateExample(selectedExample.id, { status: event.target.value })} aria-label="HTTP status code">
+                {HTTP_STATUS_CODES.map((status) => <option key={status} value={status}>{status}</option>)}
+              </select>
+            )}
+            <select value={selectedExample.id} onChange={(event) => selectExample(event.target.value)} aria-label="Request example case">
+              {examples.map((example, index) => (
+                <option key={example.id} value={example.id}>{includeStatus ? `${example.status ?? "200"} ` : ""}{example.name || `Case ${index + 1}`}</option>
+              ))}
+            </select>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Edit example name"
+              title="Edit example name"
+              onClick={() => {
+                const name = window.prompt("Example case name", selectedExample.name);
+                if (name?.trim()) updateExample(selectedExample.id, { name: name.trim() });
+              }}
+            >
+              <Edit3 size={16} />
+            </button>
+            {onParseExample && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!selectedExample.value.trim()) return;
+                  try {
+                    const fields = parseJsonFields(selectedExample.value, location);
+                    if (fields.length > 0) onParseExample(fields);
+                  } catch {
+                    window.alert("Example must be valid JSON.");
+                  }
+                }}
+              >
+                Parse JSON
+              </button>
+            )}
+            <button className="icon-button" type="button" aria-label="Remove example" title="Remove example" onClick={() => onChange(examples.filter((item) => item.id !== selectedExample.id))}>
+              <Trash2 size={16} />
+            </button>
+          </div>
+          <textarea value={selectedExample.value} onChange={(event) => updateExample(selectedExample.id, { value: event.target.value })} />
+        </div>
+      ) : (
+        <button type="button" onClick={() => onChange([{ id: uid(), name: includeStatus ? "Success" : "Default", status: includeStatus ? "200" : undefined, value: "" }])}>Add {includeStatus ? "Response" : "Request"} Example</button>
+      )}
     </div>
   );
 }
