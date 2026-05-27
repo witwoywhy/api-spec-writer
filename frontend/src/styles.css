@@ -154,14 +154,12 @@ textarea:focus {
 }
 
 .view-mode-control {
-  border: 1px solid rgba(191, 208, 214, 0.18);
+  border: 1px solid var(--line);
   border-radius: 6px;
   flex: 0 0 auto;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 2px;
-  margin-left: auto;
-  margin-top: 1px;
   padding: 2px;
   width: 84px;
 }
@@ -173,17 +171,17 @@ textarea:focus {
   min-width: 0;
   border: 0;
   background: transparent;
-  color: #bfd0d6;
+  color: var(--muted);
   padding: 4px 3px;
 }
 
 .view-mode-control button:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: #e8eef2;
 }
 
 .view-mode-control button.active {
-  background: rgba(20, 184, 166, 0.18);
-  color: #ffffff;
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--accent-strong);
 }
 
 .nav-section {
@@ -377,7 +375,7 @@ textarea:focus {
 
 .workspace-header {
   display: flex;
-  justify-content: flex-start;
+  justify-content: space-between;
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
@@ -391,6 +389,7 @@ textarea:focus {
   align-items: center;
   display: flex;
   gap: 8px;
+  flex: 1 1 auto;
   min-width: 0;
 }
 

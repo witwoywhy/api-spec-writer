@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeft, PanelRight, Trash2, Upload } from "lucide-react";
+import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
@@ -247,17 +247,6 @@ function App() {
             <h1>API Spec Writer</h1>
             <p>Local project tree for service specs.</p>
           </div>
-          <div className="view-mode-control" aria-label="View mode">
-            <button className={viewMode === "split" ? "active" : ""} type="button" title="Editor and preview" aria-label="Editor and preview" onClick={() => setViewMode("split")}>
-              <Columns2 size={15} />
-            </button>
-            <button className={viewMode === "edit" ? "active" : ""} type="button" title="Editor only" aria-label="Editor only" onClick={() => setViewMode("edit")}>
-              <PanelLeft size={15} />
-            </button>
-            <button className={viewMode === "preview" ? "active" : ""} type="button" title="Preview only" aria-label="Preview only" onClick={() => setViewMode("preview")}>
-              <PanelRight size={15} />
-            </button>
-          </div>
         </div>
 
         <button className="primary wide" type="button" onClick={createProject}>
@@ -345,6 +334,19 @@ function App() {
                   </div>
                 ) : null}
               </div>
+              {page === "services" ? (
+                <div className="view-mode-control" aria-label="View mode">
+                  <button className={viewMode === "split" ? "active" : ""} type="button" title="Editor and preview" aria-label="Editor and preview" onClick={() => setViewMode("split")}>
+                    <Columns2 size={15} />
+                  </button>
+                  <button className={viewMode === "edit" ? "active" : ""} type="button" title="Editor only" aria-label="Editor only" onClick={() => setViewMode("edit")}>
+                    <PanelRightClose size={15} />
+                  </button>
+                  <button className={viewMode === "preview" ? "active" : ""} type="button" title="Preview only" aria-label="Preview only" onClick={() => setViewMode("preview")}>
+                    <PanelLeftClose size={15} />
+                  </button>
+                </div>
+              ) : null}
             </header>
 
             {page === "services" && (
