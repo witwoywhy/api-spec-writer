@@ -103,7 +103,13 @@ textarea:focus {
   border-right: 1px solid var(--line);
   background: #14252c;
   color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   padding: 18px;
+  position: sticky;
+  top: 0;
 }
 
 .brand {
@@ -144,6 +150,9 @@ textarea:focus {
 
 .nav-section {
   margin-top: 20px;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: 12px;
 }
 
 .nav-section h2 {
@@ -152,6 +161,23 @@ textarea:focus {
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: #bfd0d6;
+}
+
+.sidebar-actions {
+  border-top: 1px solid rgba(191, 208, 214, 0.18);
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 14px;
+}
+
+.sidebar-actions button {
+  font-size: 12px;
+  justify-content: center;
+  min-width: 0;
+  padding-inline: 8px;
+  white-space: nowrap;
 }
 
 .field-groups {

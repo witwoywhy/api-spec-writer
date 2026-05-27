@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Clipboard, Download, FilePlus2, FolderPlus } from "lucide-react";
+import { Braces, Clipboard, Download, FilePlus2, FolderPlus, Upload } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
@@ -30,6 +30,7 @@ function App() {
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
   const htmlExportRef = useRef<HTMLDivElement>(null);
+  const importProjectInputRef = useRef<HTMLInputElement>(null);
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const markdown = useMemo(
@@ -162,6 +163,26 @@ function App() {
     }
     exportMarkdown();
   };
+  const exportProject = () => {
+    if (!selectedProject) return;
+    downloadFile(`${safeFileName(selectedProject.name)}.json`, JSON.stringify(selectedProject, null, 2), "application/json;charset=utf-8");
+  };
+  const importProject = async (file: File | undefined) => {
+    if (!file) return;
+    try {
+      const imported = JSON.parse(await file.text()) as Project;
+      const project = cloneImportedProject(imported);
+      await localStorageProjectStore.createProject(project);
+      await refreshStore();
+      setSelectedProjectId(project.id);
+      setSelectedServiceId(project.services[0]?.id ?? "");
+      setPage("services");
+    } catch {
+      window.alert("Project JSON is invalid.");
+    } finally {
+      if (importProjectInputRef.current) importProjectInputRef.current.value = "";
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -216,6 +237,21 @@ function App() {
             setPage("services");
           }}
         />
+        <div className="sidebar-actions">
+          <button className="wide" type="button" onClick={exportProject} disabled={!selectedProject}>
+            <Download size={16} /> Export Project
+          </button>
+          <button className="wide" type="button" onClick={() => importProjectInputRef.current?.click()}>
+            <Upload size={16} /> Import Project
+          </button>
+          <input
+            ref={importProjectInputRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => void importProject(event.target.files?.[0])}
+          />
+        </div>
       </aside>
 
       <main className="workspace">
@@ -375,6 +411,51 @@ function buildHtmlDocument(title: string, body: string) {
 
 function escapeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
+}
+
+function cloneImportedProject(project: Project): Project {
+  if (!project?.name || !Array.isArray(project.services) || !Array.isArray(project.event_code) || !Array.isArray(project.error_code)) {
+    throw new Error("Invalid project");
+  }
+
+  const timestamp = now();
+  const errorCodeIds = new Map<string, string>();
+  const errorCodeIdsByCode = new Map<string, string>();
+  const errorCode = project.error_code.map((error) => {
+    const id = uid();
+    errorCodeIds.set(error.id, id);
+    errorCodeIdsByCode.set(error.code, id);
+    return { ...error, id };
+  });
+
+  return {
+    id: uid(),
+    name: project.name,
+    event_code: project.event_code.map((eventCode) => ({ ...eventCode, id: uid() })),
+    error_code: errorCode,
+    services: project.services.map((service) => ({
+      ...service,
+      id: uid(),
+      updatedAt: timestamp,
+      spec: {
+        ...service.spec,
+        requestFields: service.spec.requestFields.map((row) => ({ ...row, id: uid() })),
+        responseFields: service.spec.responseFields.map((row) => ({ ...row, id: uid() })),
+        errors: service.spec.errors.map((error) => ({
+          ...error,
+          id: uid(),
+          errorCodeId: error.errorCodeId ? errorCodeIds.get(error.errorCodeId) : errorCodeIdsByCode.get(error.code),
+        })),
+        mappingSections: service.spec.mappingSections.map((section) => ({
+          ...section,
+          id: uid(),
+          rows: section.rows.map((row) => ({ ...row, id: uid() })),
+        })),
+      },
+    })),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+  };
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
