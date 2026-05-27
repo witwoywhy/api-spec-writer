@@ -73,6 +73,12 @@ export function ServiceEditor({
           exampleLabel="Request Examples"
           examples={spec.requestExamples}
           onExamplesChange={(requestExamples) => patch({ requestExamples, requestExample: requestExamples[0]?.value ?? "" })}
+          onParseExamples={(requestExamples, fields) => onChange((current) => ({
+            ...current,
+            requestExample: requestExamples[0]?.value ?? "",
+            requestExamples,
+            requestFields: [...current.requestFields.filter((row) => row.location !== "BODY"), ...fields],
+          }))}
           onParseExample={(fields) => onChange((current) => ({ ...current, requestFields: [...current.requestFields.filter((row) => row.location !== "BODY"), ...fields] }))}
           onAdd={(location) => addField("requestFields", location)}
           onUpdate={(id, row) => updateField("requestFields", id, row)}
@@ -139,6 +145,12 @@ export function ServiceEditor({
           examples={spec.responseExamples}
           includeStatus
           onExamplesChange={(responseExamples) => patch({ responseExamples, responseExample: responseExamples[0]?.value ?? "" })}
+          onParseExamples={(responseExamples, fields) => onChange((current) => ({
+            ...current,
+            responseExample: responseExamples[0]?.value ?? "",
+            responseExamples,
+            responseFields: [...current.responseFields.filter((row) => row.location !== "BODY"), ...fields],
+          }))}
           onParseExample={(fields) => onChange((current) => ({ ...current, responseFields: [...current.responseFields.filter((row) => row.location !== "BODY"), ...fields] }))}
           onAdd={(location) => addField("responseFields", location)}
           onUpdate={(id, row) => updateField("responseFields", id, row)}
@@ -165,6 +177,7 @@ function FieldRows({
   includeStatus,
   onExampleChange,
   onExamplesChange,
+  onParseExamples,
   onParseExample,
 }: {
   rows: FieldRow[];
@@ -180,6 +193,7 @@ function FieldRows({
   includeStatus?: boolean;
   onExampleChange?: (value: string) => void;
   onExamplesChange?: (examples: ExampleCase[]) => void;
+  onParseExamples?: (examples: ExampleCase[], rows: FieldRow[]) => void;
   onParseExample?: (rows: FieldRow[]) => void;
 }) {
   return (
@@ -219,6 +233,7 @@ function FieldRows({
                 location={location}
                 includeStatus={includeStatus}
                 onChange={onExamplesChange}
+                onParseExamples={onParseExamples}
                 onParseExample={onParseExample}
               />
             )}
@@ -233,6 +248,7 @@ function FieldRows({
                         if (!exampleValue?.trim()) return;
                         try {
                           const fields = parseJsonFields(exampleValue ?? "", location);
+                          onExampleChange(JSON.stringify(JSON.parse(exampleValue), null, 2));
                           if (fields.length > 0) onParseExample(fields);
                         } catch {
                           window.alert("Example must be valid JSON.");
@@ -259,6 +275,7 @@ function ExampleCases({
   location,
   includeStatus = false,
   onChange,
+  onParseExamples,
   onParseExample,
 }: {
   label: string;
@@ -266,6 +283,7 @@ function ExampleCases({
   location: RequestLocation | ResponseLocation;
   includeStatus?: boolean;
   onChange: (examples: ExampleCase[]) => void;
+  onParseExamples?: (examples: ExampleCase[], rows: FieldRow[]) => void;
   onParseExample?: (rows: FieldRow[]) => void;
 }) {
   const [selectedExampleId, setSelectedExampleId] = useState(examples[0]?.id ?? "");
@@ -327,7 +345,14 @@ function ExampleCases({
                   if (!selectedExample.value.trim()) return;
                   try {
                     const fields = parseJsonFields(selectedExample.value, location);
-                    if (fields.length > 0) onParseExample(fields);
+                    const value = JSON.stringify(JSON.parse(selectedExample.value), null, 2);
+                    const nextExamples = examples.map((example) => example.id === selectedExample.id ? { ...example, value } : example);
+                    if (onParseExamples) {
+                      onParseExamples(nextExamples, fields);
+                    } else {
+                      onChange(nextExamples);
+                      if (fields.length > 0) onParseExample(fields);
+                    }
                   } catch {
                     window.alert("Example must be valid JSON.");
                   }
