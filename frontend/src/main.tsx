@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Clipboard, FilePlus2, FolderPlus } from "lucide-react";
+import { Braces, Clipboard, Download, FilePlus2, FolderPlus } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
-import { MarkdownPreview } from "./components/MarkdownPreview";
+import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
 import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
 import type { Project, Service, ServiceSpec, StoreDocument } from "./domain";
@@ -13,7 +13,7 @@ import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefault
 import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
 
-type MarkdownMode = "preview" | "raw";
+type MarkdownMode = "markdown" | "raw" | "html";
 
 const now = () => new Date().toISOString();
 const initialRoute = parseAppRoute(window.location.pathname);
@@ -27,6 +27,7 @@ function App() {
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("raw");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
+  const htmlExportRef = useRef<HTMLDivElement>(null);
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const markdown = useMemo(
@@ -139,6 +140,17 @@ function App() {
     await refreshStore();
   };
 
+  const exportBaseName = safeFileName(selectedService?.spec.name || selectedService?.name || "api-spec");
+  const exportMarkdown = () => {
+    if (!markdown.trim()) return;
+    downloadFile(`${exportBaseName}.md`, markdown, "text/markdown;charset=utf-8");
+  };
+  const exportHtml = () => {
+    if (!markdown.trim()) return;
+    const html = htmlExportRef.current?.innerHTML ?? "";
+    downloadFile(`${exportBaseName}.html`, buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html), "text/html;charset=utf-8");
+  };
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -236,17 +248,25 @@ function App() {
                       <h3>Generated Markdown</h3>
                       <div className="preview-actions">
                         <div className="segmented-control" aria-label="Markdown display mode">
-                          <button className={markdownMode === "preview" ? "active" : ""} type="button" onClick={() => setMarkdownMode("preview")}>Preview</button>
+                          <button className={markdownMode === "markdown" ? "active" : ""} type="button" onClick={() => setMarkdownMode("markdown")}>Markdown</button>
                           <button className={markdownMode === "raw" ? "active" : ""} type="button" onClick={() => setMarkdownMode("raw")}>Raw</button>
+                          <button className={markdownMode === "html" ? "active" : ""} type="button" onClick={() => setMarkdownMode("html")}>HTML</button>
                         </div>
                         <button type="button" onClick={() => navigator.clipboard.writeText(markdown)}><Clipboard size={16} /> Copy</button>
+                        <button type="button" onClick={exportMarkdown}><Download size={16} /> Markdown</button>
+                        <button type="button" onClick={exportHtml}><Download size={16} /> HTML</button>
                       </div>
                     </div>
-                    {markdownMode === "preview" ? (
+                    {markdownMode === "markdown" ? (
                       <MarkdownPreview markdown={markdown} />
+                    ) : markdownMode === "html" ? (
+                      <HtmlPreview markdown={markdown} />
                     ) : (
                       <pre>{markdown || "Select a service to preview the spec."}</pre>
                     )}
+                    <div className="export-render" aria-hidden="true" ref={htmlExportRef}>
+                      <HtmlPreview markdown={markdown} />
+                    </div>
                   </section>
                 )}
               </div>
@@ -292,6 +312,53 @@ function toggleSetValue(current: Set<string>, value: string) {
   if (next.has(value)) next.delete(value);
   else next.add(value);
   return next;
+}
+
+function safeFileName(value: string) {
+  return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "api-spec";
+}
+
+function downloadFile(fileName: string, content: string, type: string) {
+  const url = URL.createObjectURL(new Blob([content], { type }));
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  URL.revokeObjectURL(url);
+}
+
+function buildHtmlDocument(title: string, body: string) {
+  return `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>${escapeHtml(title)}</title>
+  <style>
+    body { margin: 0; background: #f6f8fb; color: #17212b; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.55; }
+    main { max-width: 980px; margin: 32px auto; background: #fff; border: 1px solid #dbe3ea; border-radius: 8px; padding: 28px; }
+    h1 { font-size: 28px; margin: 0 0 18px; }
+    h2 { border-bottom: 1px solid #dbe3ea; font-size: 21px; margin: 28px 0 12px; padding-bottom: 8px; }
+    h3 { font-size: 16px; margin: 20px 0 10px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; margin: 10px 0 16px; }
+    th, td { border: 1px solid #dbe3ea; padding: 7px 8px; text-align: left; vertical-align: top; }
+    th { background: #f3f6f9; }
+    code { background: #eef2f4; border-radius: 4px; padding: 1px 4px; }
+    pre { background: #f8fafc; border: 1px solid #dbe3ea; border-radius: 6px; color: #17212b; overflow: auto; padding: 12px; }
+    pre code { background: transparent; padding: 0; color: inherit; }
+    .mermaid-diagram { background: #fff; border: 1px solid #dbe3ea; border-radius: 8px; margin: 12px 0; overflow-x: auto; padding: 12px; }
+    .mermaid-error { background: #fff7f7; border-color: #f3c4c0; color: #17212b; }
+    svg { max-width: 100%; }
+  </style>
+</head>
+<body>
+  <main>${body}</main>
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
 createRoot(document.getElementById("root")!).render(<App />);
