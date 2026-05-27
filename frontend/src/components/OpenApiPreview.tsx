@@ -77,7 +77,6 @@ function OpenApiBody({ title, body }: { title: string; body: any }) {
   return (
     <section className="openapi-section">
       <h3>{title}</h3>
-      <OpenApiBodyFields fields={content["x-fields"] ?? []} />
       <SchemaTree schema={content.schema} />
       <OpenApiExamples examples={content.examples} />
     </section>
@@ -96,7 +95,6 @@ function OpenApiResponses({ responses }: { responses: Record<string, any> }) {
               <span>{status}</span>
               <p>{response.description}</p>
             </div>
-            {content?.["x-fields"] ? <OpenApiBodyFields fields={content["x-fields"]} /> : null}
             {content?.schema ? <SchemaTree schema={content.schema} /> : null}
             {content?.examples ? <OpenApiExamples examples={content.examples} /> : null}
             {content?.example ? <pre>{JSON.stringify(content.example, null, 2)}</pre> : null}
@@ -107,11 +105,14 @@ function OpenApiResponses({ responses }: { responses: Record<string, any> }) {
   );
 }
 
-function OpenApiBodyFields({ fields }: { fields: any[] }) {
-  if (fields.length === 0) return null;
+function SchemaTree({ schema }: { schema: any }) {
+  if (!schema) return null;
+  const rows = schemaRows(schema);
+  if (rows.length === 0) return null;
+
   return (
-    <div className="openapi-fields">
-      <h4>Body Fields</h4>
+    <div className="openapi-schema">
+      <h4>Schema</h4>
       <div className="markdown-table-wrap">
         <table>
           <thead>
@@ -123,12 +124,12 @@ function OpenApiBodyFields({ fields }: { fields: any[] }) {
             </tr>
           </thead>
           <tbody>
-            {fields.map((field) => (
-              <tr key={field.id ?? field.field}>
-                <td><code>{field.field}</code></td>
-                <td>{field.type}</td>
-                <td>{field.require}</td>
-                <td>{field.description}</td>
+            {rows.map((row) => (
+              <tr key={row.field}>
+                <td><code>{row.field}</code></td>
+                <td>{row.type}</td>
+                <td>{row.required ? "YES" : "NO"}</td>
+                <td>{row.description}</td>
               </tr>
             ))}
           </tbody>
@@ -138,40 +139,24 @@ function OpenApiBodyFields({ fields }: { fields: any[] }) {
   );
 }
 
-function SchemaTree({ schema }: { schema: any }) {
-  if (!schema) return null;
-  return (
-    <div className="openapi-schema">
-      <h4>Schema</h4>
-      <SchemaRows schema={schema} />
-    </div>
-  );
-}
-
-function SchemaRows({ schema, prefix = "" }: { schema: any; prefix?: string }) {
+function schemaRows(schema: any, prefix = ""): Array<{ field: string; type: string; required: boolean; description: string }> {
   const properties = schema?.properties ?? {};
   const required = new Set(schema?.required ?? []);
-  return (
-    <div className="openapi-schema-rows">
-      {Object.entries(properties).map(([name, child]) => {
-        const childSchema = child as any;
-        const field = prefix ? `${prefix}.${name}` : name;
-        const label = childSchema.type === "array" ? `${field}[]` : field;
-        const nested = childSchema.type === "array" ? childSchema.items : childSchema;
-        return (
-          <div key={field}>
-            <div className="openapi-schema-row">
-              <code>{label}</code>
-              <span>{schemaLabel(childSchema)}</span>
-              <span>{required.has(name) ? "required" : "optional"}</span>
-              <p>{childSchema.description}</p>
-            </div>
-            {nested?.properties ? <SchemaRows schema={nested} prefix={childSchema.type === "array" ? `${field}[]` : field} /> : null}
-          </div>
-        );
-      })}
-    </div>
-  );
+  return Object.entries(properties).flatMap(([name, child]) => {
+    const childSchema = child as any;
+    const field = prefix ? `${prefix}.${name}` : name;
+    const label = childSchema.type === "array" ? `${field}[]` : field;
+    const nested = childSchema.type === "array" ? childSchema.items : childSchema;
+    return [
+      {
+        field: label,
+        type: schemaLabel(childSchema),
+        required: required.has(name),
+        description: childSchema.description ?? "",
+      },
+      ...(nested?.properties ? schemaRows(nested, childSchema.type === "array" ? `${field}[]` : field) : []),
+    ];
+  });
 }
 
 function OpenApiExamples({ examples }: { examples: Record<string, any> | undefined }) {

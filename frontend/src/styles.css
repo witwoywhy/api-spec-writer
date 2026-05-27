@@ -679,7 +679,8 @@ pre {
 }
 
 .markdown-preview table,
-.html-preview table {
+.html-preview table,
+.openapi-preview table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
@@ -688,7 +689,9 @@ pre {
 .markdown-preview th,
 .markdown-preview td,
 .html-preview th,
-.html-preview td {
+.html-preview td,
+.openapi-preview th,
+.openapi-preview td {
   border: 1px solid var(--line);
   padding: 7px 8px;
   text-align: left;
@@ -696,7 +699,8 @@ pre {
 }
 
 .markdown-preview th,
-.html-preview th {
+.html-preview th,
+.openapi-preview th {
   background: var(--surface-soft);
 }
 
@@ -799,7 +803,6 @@ pre {
 }
 
 .openapi-section h3,
-.openapi-fields h4,
 .openapi-schema h4,
 .openapi-examples h4 {
   margin: 0;
@@ -823,26 +826,9 @@ pre {
   margin: 0;
 }
 
-.openapi-fields,
 .openapi-schema {
   display: grid;
   gap: 8px;
-}
-
-.openapi-schema-rows {
-  display: grid;
-  gap: 5px;
-}
-
-.openapi-schema-row {
-  align-items: start;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: minmax(180px, 1fr) 120px 90px minmax(160px, 1fr);
-}
-
-.openapi-schema-row p {
-  margin: 0;
 }
 
 .openapi-examples {
