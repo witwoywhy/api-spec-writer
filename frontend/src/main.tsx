@@ -15,7 +15,7 @@ import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefault
 import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
 
-type MarkdownMode = "markdown" | "raw" | "html" | "openapi";
+type MarkdownMode = "markdown" | "html" | "openapi";
 type ViewMode = "split" | "edit" | "preview";
 
 const now = () => new Date().toISOString();
@@ -374,7 +374,6 @@ function App() {
                         <h3>Preview</h3>
                         <select className="preview-select" value={markdownMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
                           <option value="markdown">Markdown</option>
-                          <option value="raw">Raw Markdown</option>
                           <option value="html">HTML</option>
                           <option value="openapi">OpenAPI</option>
                         </select>
@@ -390,7 +389,7 @@ function App() {
                     ) : markdownMode === "openapi" ? (
                       <OpenApiPreview document={openApiDocument} />
                     ) : (
-                      <pre>{markdown || "Select a service to preview the spec."}</pre>
+                      <MarkdownPreview markdown={markdown} />
                     )}
                     <div className="export-render" aria-hidden="true" ref={htmlExportRef}>
                       <HtmlPreview markdown={markdown} />
