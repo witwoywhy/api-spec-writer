@@ -222,6 +222,22 @@ function App() {
     if (!selectedProject) return;
     downloadFile(`${safeFileName(selectedProject.name)}.json`, JSON.stringify(selectedProject, null, 2), "application/json;charset=utf-8");
   };
+  const exportProjectPreview = () => {
+    if (!selectedProject) return;
+    const projectBaseName = safeFileName(selectedProject.name);
+    if (markdownMode === "openapi") {
+      downloadFile(`${projectBaseName}.openapi.json`, JSON.stringify(projectOpenApi(selectedProject), null, 2), "application/json;charset=utf-8");
+      return;
+    }
+
+    const projectMarkdown = projectSpecMarkdown(selectedProject);
+    if (markdownMode === "html") {
+      downloadFile(`${projectBaseName}.html`, buildHtmlDocument(selectedProject.name, markdownToHtml(projectMarkdown)), "text/html;charset=utf-8");
+      return;
+    }
+
+    downloadFile(`${projectBaseName}.md`, projectMarkdown, "text/markdown;charset=utf-8");
+  };
   const importProject = async (file: File | undefined) => {
     if (!file) return;
     try {
@@ -297,6 +313,9 @@ function App() {
         <div className="sidebar-actions">
           <button className="wide" type="button" onClick={exportProject} disabled={!selectedProject}>
             <Download size={16} /> Export Project
+          </button>
+          <button className="wide" type="button" onClick={exportProjectPreview} disabled={!selectedProject}>
+            <Download size={16} /> Export Preview
           </button>
           <button className="wide" type="button" onClick={() => importProjectInputRef.current?.click()}>
             <Upload size={16} /> Import Project
@@ -504,6 +523,188 @@ function buildHtmlDocument(title: string, body: string) {
   <main>${body}</main>
 </body>
 </html>`;
+}
+
+function projectSpecMarkdown(project: Project) {
+  return [
+    `# ${project.name}`,
+    eventCodesMarkdown(project),
+    errorCodesMarkdown(project),
+    "## Services",
+    ...project.services.map((service) => serviceMarkdown(service.spec, project.error_code)),
+  ].filter((section) => section.trim()).join("\n\n");
+}
+
+function eventCodesMarkdown(project: Project) {
+  if (project.event_code.length === 0) return "## Event Codes\n\nNo event codes.";
+  return [
+    "## Event Codes",
+    "| Code | Name | Description |",
+    "|------|------|-------------|",
+    ...project.event_code.map((row) => `| ${escapePipe(row.code)} | ${escapePipe(row.name)} | ${escapePipe(row.description)} |`),
+  ].join("\n");
+}
+
+function errorCodesMarkdown(project: Project) {
+  if (project.error_code.length === 0) return "## Error Codes\n\nNo error codes.";
+  return [
+    "## Error Codes",
+    "| Domain | HTTP | Code | Message EN | Description EN | Message TH | Description TH |",
+    "|--------|------|------|------------|----------------|------------|----------------|",
+    ...project.error_code.map((row) => [
+      escapePipe(row.domain),
+      escapePipe(row.status),
+      escapePipe(row.code),
+      escapePipe(row.message_en),
+      escapePipe(row.description_en),
+      escapePipe(row.message_th),
+      escapePipe(row.description_th),
+    ].join(" | ")).map((cells) => `| ${cells} |`),
+  ].join("\n");
+}
+
+function projectOpenApi(project: Project) {
+  return {
+    openapi: "3.0.3",
+    info: {
+      title: project.name,
+      version: "1.0.0",
+    },
+    paths: mergeProjectOpenApiPaths(project),
+    "x-event-codes": project.event_code,
+    "x-error-codes": project.error_code,
+    "x-services": project.services.map((service) => ({
+      id: service.id,
+      name: service.name,
+      type: service.spec.type,
+      updatedAt: service.updatedAt,
+    })),
+  };
+}
+
+function mergeProjectOpenApiPaths(project: Project) {
+  const paths: Record<string, Record<string, unknown>> = {};
+  for (const service of project.services) {
+    const document = serviceOpenApi(service.spec, project.error_code);
+    for (const [path, methods] of Object.entries(document.paths ?? {})) {
+      for (const [method, operation] of Object.entries(methods as Record<string, unknown>)) {
+        const targetPath = paths[path]?.[method] ? uniqueOpenApiPath(paths, path, service.name) : path;
+        paths[targetPath] ??= {};
+        paths[targetPath][method] = {
+          ...(operation as Record<string, unknown>),
+          "x-service-id": service.id,
+          "x-service-name": service.name,
+          ...(targetPath === path ? {} : { "x-original-path": path }),
+        };
+      }
+    }
+  }
+  return paths;
+}
+
+function uniqueOpenApiPath(paths: Record<string, unknown>, path: string, serviceName: string) {
+  const base = `${path.replace(/\/$/, "")}/_${safeFileName(serviceName)}`;
+  let candidate = base;
+  let index = 2;
+  while (paths[candidate]) {
+    candidate = `${base}-${index}`;
+    index += 1;
+  }
+  return candidate;
+}
+
+function markdownToHtml(markdown: string) {
+  const lines = markdown.split("\n");
+  const html: string[] = [];
+  let paragraph: string[] = [];
+  let table: string[] = [];
+  let codeFence = "";
+  let codeLines: string[] = [];
+
+  const flushParagraph = () => {
+    if (paragraph.length === 0) return;
+    html.push(`<p>${inlineMarkdown(paragraph.join(" "))}</p>`);
+    paragraph = [];
+  };
+  const flushTable = () => {
+    if (table.length === 0) return;
+    const [head, separator, ...body] = table;
+    if (!separator?.includes("---")) {
+      html.push(...table.map((line) => `<p>${inlineMarkdown(line)}</p>`));
+      table = [];
+      return;
+    }
+    html.push("<table><thead><tr>");
+    for (const cell of markdownTableCells(head)) html.push(`<th>${inlineMarkdown(cell)}</th>`);
+    html.push("</tr></thead><tbody>");
+    for (const row of body) {
+      html.push("<tr>");
+      for (const cell of markdownTableCells(row)) html.push(`<td>${inlineMarkdown(cell)}</td>`);
+      html.push("</tr>");
+    }
+    html.push("</tbody></table>");
+    table = [];
+  };
+  const flushCode = () => {
+    if (!codeFence) return;
+    const code = escapeHtml(codeLines.join("\n"));
+    html.push(`<pre${codeFence === "mermaid" ? " class=\"mermaid-diagram\"" : ""}><code>${code}</code></pre>`);
+    codeFence = "";
+    codeLines = [];
+  };
+
+  for (const line of lines) {
+    if (line.startsWith("```")) {
+      if (codeFence) {
+        flushCode();
+      } else {
+        flushParagraph();
+        flushTable();
+        codeFence = line.replace(/^```/, "").trim() || "text";
+        codeLines = [];
+      }
+      continue;
+    }
+    if (codeFence) {
+      codeLines.push(line);
+      continue;
+    }
+    if (line.startsWith("|")) {
+      flushParagraph();
+      table.push(line);
+      continue;
+    }
+    flushTable();
+    if (!line.trim()) {
+      flushParagraph();
+      continue;
+    }
+    const heading = line.match(/^(#{1,3})\s+(.+)$/);
+    if (heading) {
+      flushParagraph();
+      const level = heading[1].length;
+      html.push(`<h${level}>${inlineMarkdown(heading[2])}</h${level}>`);
+      continue;
+    }
+    paragraph.push(line);
+  }
+
+  flushParagraph();
+  flushTable();
+  flushCode();
+  return html.join("\n");
+}
+
+function markdownTableCells(row: string) {
+  return row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map((cell) => cell.trim());
+}
+
+function inlineMarkdown(value: string) {
+  return escapeHtml(value).replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function escapePipe(value: string | number | undefined) {
+  return String(value ?? "").replaceAll("|", "\\|").replaceAll("\n", " ");
 }
 
 function escapeHtml(value: string) {
