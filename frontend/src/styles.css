@@ -353,6 +353,10 @@ textarea:focus {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.service-editor-layout.preview-only {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .panel {
   min-width: 0;
   border: 1px solid var(--line);
@@ -373,6 +377,12 @@ textarea:focus {
   display: grid;
   grid-template-rows: auto minmax(260px, 1fr);
   overflow: hidden;
+}
+
+.preview-only .preview-panel {
+  position: static;
+  max-height: none;
+  min-height: calc(100vh - 112px);
 }
 
 .panel-title {

@@ -17,6 +17,7 @@ type MarkdownMode = "markdown" | "raw" | "html" | "openapi";
 
 const now = () => new Date().toISOString();
 const initialRoute = parseAppRoute(window.location.pathname);
+const initialFullPreview = new URLSearchParams(window.location.search).get("preview") === "true";
 
 function App() {
   const [store, setStore] = useState<StoreDocument>({ schemaVersion: 1, projects: [] });
@@ -24,6 +25,7 @@ function App() {
   const [selectedServiceId, setSelectedServiceId] = useState(initialRoute.serviceId);
   const [page, setPage] = useState<Page>(initialRoute.page);
   const [showDisplay, setShowDisplay] = useState(true);
+  const [fullPreview, setFullPreview] = useState(initialFullPreview);
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("markdown");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
@@ -62,6 +64,7 @@ function App() {
       setSelectedProjectId(route.projectId);
       setSelectedServiceId(route.serviceId);
       setPage(route.page);
+      setFullPreview(new URLSearchParams(window.location.search).get("preview") === "true");
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -73,8 +76,10 @@ function App() {
       projectId: selectedProject?.id ?? "",
       serviceId: page === "services" ? (selectedService?.id ?? "") : "",
     });
-    if (path !== window.location.pathname) window.history.pushState(null, "", path);
-  }, [page, selectedProject?.id, selectedService?.id]);
+    const search = fullPreview && page === "services" && selectedService ? "?preview=true" : "";
+    const url = `${path}${search}`;
+    if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
+  }, [fullPreview, page, selectedProject?.id, selectedService, selectedService?.id]);
 
   const toggleProject = (projectId: string) => {
     setOpenProjects((current) => toggleSetValue(current, projectId));
@@ -230,26 +235,28 @@ function App() {
             </header>
 
             {page === "services" && (
-              <div className={showDisplay ? "service-editor-layout" : "service-editor-layout display-off"}>
-                <section className="panel editor-panel">
-                  {selectedService ? (
-                    <ServiceEditor
-                      spec={selectedService.spec}
-                      projectErrorCodes={selectedProject.error_code}
-                      showPreview={showDisplay}
-                      onTogglePreview={() => setShowDisplay((current) => !current)}
-                      onChange={updateServiceSpec}
-                    />
-                  ) : (
-                    <div className="empty-state compact">
-                      <FilePlus2 size={32} />
-                      <h2>No service yet</h2>
-                      <button className="primary" type="button" onClick={() => createService()}>Create Service</button>
-                    </div>
-                  )}
-                </section>
+              <div className={fullPreview ? "service-editor-layout preview-only" : showDisplay ? "service-editor-layout" : "service-editor-layout display-off"}>
+                {!fullPreview && (
+                  <section className="panel editor-panel">
+                    {selectedService ? (
+                      <ServiceEditor
+                        spec={selectedService.spec}
+                        projectErrorCodes={selectedProject.error_code}
+                        showPreview={showDisplay}
+                        onTogglePreview={() => setShowDisplay((current) => !current)}
+                        onChange={updateServiceSpec}
+                      />
+                    ) : (
+                      <div className="empty-state compact">
+                        <FilePlus2 size={32} />
+                        <h2>No service yet</h2>
+                        <button className="primary" type="button" onClick={() => createService()}>Create Service</button>
+                      </div>
+                    )}
+                  </section>
+                )}
 
-                {showDisplay && (
+                {(showDisplay || fullPreview) && (
                   <section className="panel preview-panel">
                     <div className="panel-title">
                       <div className="preview-title">
