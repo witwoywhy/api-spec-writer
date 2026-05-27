@@ -1,4 +1,5 @@
 import { Edit3, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
@@ -267,13 +268,16 @@ function ExampleCases({
   onChange: (examples: ExampleCase[]) => void;
   onParseExample?: (rows: FieldRow[]) => void;
 }) {
-  const selectedExample = examples[0];
+  const [selectedExampleId, setSelectedExampleId] = useState(examples[0]?.id ?? "");
+  const selectedExample = examples.find((example) => example.id === selectedExampleId) ?? examples[0];
+
+  useEffect(() => {
+    if (selectedExampleId && examples.some((example) => example.id === selectedExampleId)) return;
+    setSelectedExampleId(examples[0]?.id ?? "");
+  }, [examples, selectedExampleId]);
+
   const updateExample = (id: string, patch: Partial<ExampleCase>) => {
     onChange(examples.map((example) => example.id === id ? { ...example, ...patch } : example));
-  };
-  const selectExample = (id: string) => {
-    const selected = examples.find((example) => example.id === id);
-    if (selected) onChange([selected, ...examples.filter((example) => example.id !== id)]);
   };
 
   return (
@@ -285,6 +289,7 @@ function ExampleCases({
           onClick={() => {
             const example = { id: uid(), name: includeStatus ? "Success" : `Case ${examples.length + 1}`, status: includeStatus ? "200" : undefined, value: "" };
             onChange([example, ...examples]);
+            setSelectedExampleId(example.id);
           }}
         >
           <Plus size={16} /> Add Example
@@ -298,7 +303,7 @@ function ExampleCases({
                 {HTTP_STATUS_CODES.map((status) => <option key={status} value={status}>{status}</option>)}
               </select>
             )}
-            <select value={selectedExample.id} onChange={(event) => selectExample(event.target.value)} aria-label="Request example case">
+            <select value={selectedExample.id} onChange={(event) => setSelectedExampleId(event.target.value)} aria-label="Request example case">
               {examples.map((example, index) => (
                 <option key={example.id} value={example.id}>{includeStatus ? `${example.status ?? "200"} ` : ""}{example.name || `Case ${index + 1}`}</option>
               ))}
@@ -331,14 +336,33 @@ function ExampleCases({
                 Parse JSON
               </button>
             )}
-            <button className="icon-button" type="button" aria-label="Remove example" title="Remove example" onClick={() => onChange(examples.filter((item) => item.id !== selectedExample.id))}>
+            <button
+              className="icon-button"
+              type="button"
+              aria-label="Remove example"
+              title="Remove example"
+              onClick={() => {
+                const nextExamples = examples.filter((item) => item.id !== selectedExample.id);
+                onChange(nextExamples);
+                setSelectedExampleId(nextExamples[0]?.id ?? "");
+              }}
+            >
               <Trash2 size={16} />
             </button>
           </div>
           <textarea value={selectedExample.value} onChange={(event) => updateExample(selectedExample.id, { value: event.target.value })} />
         </div>
       ) : (
-        <button type="button" onClick={() => onChange([{ id: uid(), name: includeStatus ? "Success" : "Default", status: includeStatus ? "200" : undefined, value: "" }])}>Add {includeStatus ? "Response" : "Request"} Example</button>
+        <button
+          type="button"
+          onClick={() => {
+            const example = { id: uid(), name: includeStatus ? "Success" : "Default", status: includeStatus ? "200" : undefined, value: "" };
+            onChange([example]);
+            setSelectedExampleId(example.id);
+          }}
+        >
+          Add {includeStatus ? "Response" : "Request"} Example
+        </button>
       )}
     </div>
   );

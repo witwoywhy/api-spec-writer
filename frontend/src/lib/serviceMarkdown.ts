@@ -127,12 +127,12 @@ function resolveServiceError(row: ErrorCode, projectErrorCodes: ErrorCode[]) {
 
 function requestExamples(spec: ServiceSpec) {
   const examples = (spec.requestExamples ?? []).filter((example) => example.value.trim());
-  if (examples.length > 0) return examples;
+  if (examples.length > 0) return examples.slice().reverse();
   return spec.requestExample.trim() ? [{ id: "legacy-request-example", name: "Default", value: spec.requestExample }] : [];
 }
 
 function responseExamples(spec: ServiceSpec) {
   const examples = (spec.responseExamples ?? []).filter((example) => example.value.trim());
-  if (examples.length > 0) return examples;
+  if (examples.length > 0) return examples.slice().reverse();
   return spec.responseExample.trim() ? [{ id: "legacy-response-example", name: "Success", status: "200", value: spec.responseExample }] : [];
 }
