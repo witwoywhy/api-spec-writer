@@ -3,6 +3,7 @@ import type { ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, 
 const DOCUMENT_STORAGE_KEY = "api-spec-writer-platform:v1";
 const TABLE_STORAGE_KEY = "api-spec-writer-platform:tables:v1";
 const ARCHIVE_STORAGE_KEY = "api-spec-writer-platform:project-archive:v1";
+const SERVICE_ARCHIVE_STORAGE_KEY = "api-spec-writer-platform:service-archive:v1";
 
 export type ProjectStoreAdaptor = {
   getSnapshot(): Promise<StoreDocument>;
@@ -14,6 +15,8 @@ export type ProjectStoreAdaptor = {
   createErrorCode(projectId: string, errorCode: ErrorCode): Promise<ErrorCode>;
   replaceErrorCodes(projectId: string, errorCodes: ErrorCode[]): Promise<ErrorCode[]>;
   createService(projectId: string, service: Service): Promise<Service>;
+  renameService(projectId: string, serviceId: string, name: string): Promise<Service>;
+  archiveService(projectId: string, serviceId: string): Promise<void>;
   updateServiceSpec(projectId: string, serviceId: string, spec: ServiceSpec): Promise<Service>;
 };
 
@@ -171,6 +174,29 @@ export const localStorageProjectStore: ProjectStoreAdaptor = {
     return service;
   },
 
+  async renameService(projectId, serviceId, name) {
+    const tableDocument = readPersistedTableDocument();
+    const service = tableDocument.tables.services.find((item) => item.projectId === projectId && item.id === serviceId);
+    if (!service) throw new Error("Service not found");
+    service.name = name;
+    service.spec = { ...service.spec, name };
+    service.updatedAt = nowIso();
+    touchProject(tableDocument, projectId);
+    writeTableDocument(tableDocument);
+    const { projectId: _projectId, ...domainService } = service;
+    return domainService;
+  },
+
+  async archiveService(projectId, serviceId) {
+    const tableDocument = readPersistedTableDocument();
+    const service = tableDocument.tables.services.find((item) => item.projectId === projectId && item.id === serviceId);
+    if (!service) throw new Error("Service not found");
+    appendArchivedService(service);
+    tableDocument.tables.services = tableDocument.tables.services.filter((item) => item.projectId !== projectId || item.id !== serviceId);
+    touchProject(tableDocument, projectId);
+    writeTableDocument(tableDocument);
+  },
+
   async updateServiceSpec(projectId, serviceId, spec) {
     const tableDocument = readPersistedTableDocument();
     const service = tableDocument.tables.services.find((item) => item.projectId === projectId && item.id === serviceId);
@@ -227,11 +253,28 @@ function appendArchivedProject(project: Project) {
   localStorage.setItem(ARCHIVE_STORAGE_KEY, JSON.stringify(archived));
 }
 
+function appendArchivedService(service: ServiceRow) {
+  const archived = readArchivedServices();
+  archived.push({ ...service, archivedAt: nowIso() });
+  localStorage.setItem(SERVICE_ARCHIVE_STORAGE_KEY, JSON.stringify(archived));
+}
+
 function readArchivedProjects() {
   const raw = localStorage.getItem(ARCHIVE_STORAGE_KEY);
   if (!raw) return [] as Array<Project & { archivedAt: string }>;
   try {
     const parsed = JSON.parse(raw) as Array<Project & { archivedAt: string }>;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function readArchivedServices() {
+  const raw = localStorage.getItem(SERVICE_ARCHIVE_STORAGE_KEY);
+  if (!raw) return [] as Array<ServiceRow & { archivedAt: string }>;
+  try {
+    const parsed = JSON.parse(raw) as Array<ServiceRow & { archivedAt: string }>;
     return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];

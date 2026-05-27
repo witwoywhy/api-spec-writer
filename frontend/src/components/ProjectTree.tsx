@@ -102,12 +102,12 @@ export function ProjectTree({
                 <div className="tree-children">
                   <button className={selected && page === "eventCodes" ? "tree-row leaf-row active" : "tree-row leaf-row"} type="button" onClick={() => onSelectEventCodes(project)}>
                     <Code2 size={14} />
-                    <span>event_code</span>
+                    <span>EVENT</span>
                     <small>{project.event_code.length}</small>
                   </button>
                   <button className={selected && page === "errorCodes" ? "tree-row leaf-row active" : "tree-row leaf-row"} type="button" onClick={() => onSelectErrorCodes(project)}>
                     <Code2 size={14} />
-                    <span>error_code</span>
+                    <span>ERROR</span>
                     <small>{project.error_code.length}</small>
                   </button>
                   <button
@@ -120,7 +120,7 @@ export function ProjectTree({
                   >
                     {servicesOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     {servicesOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
-                    <span>services</span>
+                    <span>SERVICE</span>
                     <small>{project.services.length}</small>
                     <span
                       className="tree-add"

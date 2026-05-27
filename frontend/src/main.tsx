@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Clipboard, Download, FilePlus2, FolderPlus, Upload } from "lucide-react";
+import { Braces, Clipboard, Download, Edit3, FilePlus2, FolderPlus, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
@@ -158,6 +158,27 @@ function App() {
     setPage("services");
   };
 
+  const renameService = async () => {
+    if (!selectedProject || !selectedService) return;
+    const name = window.prompt("Service name", selectedService.name);
+    if (!name?.trim()) return;
+    await localStorageProjectStore.renameService(selectedProject.id, selectedService.id, name.trim());
+    await refreshStore();
+  };
+
+  const archiveService = async () => {
+    if (!selectedProject || !selectedService) return;
+    const confirmed = window.confirm(`Delete service "${selectedService.name}"? It will be archived in local storage.`);
+    if (!confirmed) return;
+    await localStorageProjectStore.archiveService(selectedProject.id, selectedService.id);
+    const snapshot = await localStorageProjectStore.getSnapshot();
+    const refreshedProject = snapshot.projects.find((project) => project.id === selectedProject.id) ?? snapshot.projects[0];
+    setStore(snapshot);
+    setSelectedProjectId(refreshedProject?.id ?? "");
+    setSelectedServiceId(refreshedProject?.services[0]?.id ?? "");
+    setPage("services");
+  };
+
   const updateServiceSpec = async (updater: (spec: ServiceSpec) => ServiceSpec) => {
     if (!selectedProject || !selectedService) return;
     const spec = updater(selectedService.spec);
@@ -284,9 +305,18 @@ function App() {
         ) : (
           <>
             <header className="workspace-header">
-              <div>
-                <p className="eyebrow">projects / {selectedProject.name}</p>
-                <h2>{selectedProject.name}</h2>
+              <div className="workspace-path">
+                <p className="eyebrow">{workspacePathLabel(page, selectedProject, selectedService)}</p>
+                {page === "services" && selectedService ? (
+                  <div className="workspace-actions">
+                    <button type="button" onClick={renameService}>
+                      <Edit3 size={13} /> Edit
+                    </button>
+                    <button className="danger-button" type="button" onClick={archiveService}>
+                      <Trash2 size={13} /> Delete
+                    </button>
+                  </div>
+                ) : null}
               </div>
             </header>
 
@@ -377,6 +407,13 @@ function mergeOpenIds(current: Set<string>, ids: string[]) {
   const next = new Set(current);
   for (const id of ids) next.add(id);
   return next;
+}
+
+function workspacePathLabel(page: Page, project: Project, service: Service | undefined) {
+  if (page === "eventCodes") return `PROJECTS / ${project.name} / EVENT`;
+  if (page === "errorCodes") return `PROJECTS / ${project.name} / ERROR`;
+  if (service) return `PROJECTS / ${project.name} / SERVICE / ${service.name}`;
+  return `PROJECTS / ${project.name} / SERVICE`;
 }
 
 function toggleSetValue(current: Set<string>, value: string) {

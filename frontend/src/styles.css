@@ -339,7 +339,7 @@ textarea:focus {
 
 .workspace-header {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   gap: 16px;
   margin-bottom: 16px;
@@ -349,11 +349,43 @@ textarea:focus {
   font-size: 26px;
 }
 
+.workspace-path {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  min-width: 0;
+}
+
+.workspace-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 5px;
+}
+
+.workspace-actions button {
+  font-size: 12px;
+  min-height: 26px;
+  padding: 4px 7px;
+}
+
+.danger-button {
+  border-color: #f3c4c0;
+  background: #fff1f0;
+  color: var(--danger);
+}
+
+.danger-button:hover {
+  background: #ffe4e2;
+}
+
 .eyebrow {
-  margin: 0 0 3px;
+  margin: 0;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .switch-button {
