@@ -20,6 +20,7 @@ export function ProjectTree({
   onArchiveProject,
   onCreateService,
   onSelectService,
+  showProjectActions,
 }: {
   projects: Project[];
   selectedProjectId: string;
@@ -37,6 +38,7 @@ export function ProjectTree({
   onArchiveProject: (project: Project) => void;
   onCreateService: (project: Project) => void;
   onSelectService: (project: Project, service: Service) => void;
+  showProjectActions: boolean;
 }) {
   return (
     <section className="nav-section">
@@ -59,44 +61,48 @@ export function ProjectTree({
                 {projectOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                 {projectOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
                 <span>{project.name}</span>
-                <span
-                  className="tree-action"
-                  role="button"
-                  tabIndex={0}
-                  title="Edit project name"
-                  aria-label="Edit project name"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onRenameProject(project);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onRenameProject(project);
-                  }}
-                >
-                  <Edit3 size={13} />
-                </span>
-                <span
-                  className="tree-action danger"
-                  role="button"
-                  tabIndex={0}
-                  title="Delete project"
-                  aria-label="Delete project"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    onArchiveProject(project);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key !== "Enter" && event.key !== " ") return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onArchiveProject(project);
-                  }}
-                >
-                  <Trash2 size={13} />
-                </span>
+                {showProjectActions ? (
+                  <>
+                    <span
+                      className="tree-action"
+                      role="button"
+                      tabIndex={0}
+                      title="Edit project name"
+                      aria-label="Edit project name"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRenameProject(project);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onRenameProject(project);
+                      }}
+                    >
+                      <Edit3 size={13} />
+                    </span>
+                    <span
+                      className="tree-action danger"
+                      role="button"
+                      tabIndex={0}
+                      title="Delete project"
+                      aria-label="Delete project"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onArchiveProject(project);
+                      }}
+                      onKeyDown={(event) => {
+                        if (event.key !== "Enter" && event.key !== " ") return;
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onArchiveProject(project);
+                      }}
+                    >
+                      <Trash2 size={13} />
+                    </span>
+                  </>
+                ) : null}
               </button>
               {projectOpen && (
                 <div className="tree-children">
@@ -122,25 +128,27 @@ export function ProjectTree({
                     {servicesOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
                     <span>SERVICE</span>
                     <small>{project.services.length}</small>
-                    <span
-                      className="tree-add"
-                      role="button"
-                      tabIndex={0}
-                      title="Create service"
-                      aria-label="Create service"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onCreateService(project);
-                      }}
-                      onKeyDown={(event) => {
-                        if (event.key !== "Enter" && event.key !== " ") return;
-                        event.preventDefault();
-                        event.stopPropagation();
-                        onCreateService(project);
-                      }}
-                    >
-                      <Plus size={13} />
-                    </span>
+                    {showProjectActions ? (
+                      <span
+                        className="tree-add"
+                        role="button"
+                        tabIndex={0}
+                        title="Create service"
+                        aria-label="Create service"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onCreateService(project);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onCreateService(project);
+                        }}
+                      >
+                        <Plus size={13} />
+                      </span>
+                    ) : null}
                   </button>
                   {servicesOpen && (
                     <div className="tree-children nested">

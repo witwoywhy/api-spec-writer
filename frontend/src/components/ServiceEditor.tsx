@@ -13,14 +13,10 @@ const REQUIRED: RequireFlag[] = ["YES", "NO"];
 export function ServiceEditor({
   spec,
   projectErrorCodes,
-  showPreview,
-  onTogglePreview,
   onChange,
 }: {
   spec: ServiceSpec;
   projectErrorCodes: ErrorCode[];
-  showPreview: boolean;
-  onTogglePreview: () => void;
   onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void;
 }) {
   const serviceType = spec.type ?? "http";
@@ -42,15 +38,6 @@ export function ServiceEditor({
     <>
       <div className="panel-title">
         <h3>Service Spec</h3>
-        <button
-          className={showPreview ? "switch-button on" : "switch-button"}
-          type="button"
-          aria-pressed={showPreview}
-          onClick={onTogglePreview}
-        >
-          <span className="switch-track"><span className="switch-thumb" /></span>
-          Preview
-        </button>
       </div>
       <Fieldset title="Header">
         <div className="grid two">

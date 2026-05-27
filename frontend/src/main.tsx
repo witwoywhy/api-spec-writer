@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Clipboard, Download, Edit3, FilePlus2, FolderPlus, Trash2, Upload } from "lucide-react";
+import { Braces, Clipboard, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeft, PanelRight, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
@@ -14,18 +14,18 @@ import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
 
 type MarkdownMode = "markdown" | "raw" | "html" | "openapi";
+type ViewMode = "split" | "edit" | "preview";
 
 const now = () => new Date().toISOString();
 const initialRoute = parseAppRoute(window.location.pathname);
-const initialFullPreview = new URLSearchParams(window.location.search).get("preview") === "true";
+const initialViewMode = parseViewMode(new URLSearchParams(window.location.search));
 
 function App() {
   const [store, setStore] = useState<StoreDocument>({ schemaVersion: 1, projects: [] });
   const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId);
   const [selectedServiceId, setSelectedServiceId] = useState(initialRoute.serviceId);
   const [page, setPage] = useState<Page>(initialRoute.page);
-  const [showDisplay, setShowDisplay] = useState(true);
-  const [fullPreview, setFullPreview] = useState(initialFullPreview);
+  const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("markdown");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
@@ -65,7 +65,7 @@ function App() {
       setSelectedProjectId(route.projectId);
       setSelectedServiceId(route.serviceId);
       setPage(route.page);
-      setFullPreview(new URLSearchParams(window.location.search).get("preview") === "true");
+      setViewMode(parseViewMode(new URLSearchParams(window.location.search)));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -77,10 +77,10 @@ function App() {
       projectId: selectedProject?.id ?? "",
       serviceId: page === "services" ? (selectedService?.id ?? "") : "",
     });
-    const search = fullPreview && page === "services" && selectedService ? "?preview=true" : "";
+    const search = page === "services" && selectedService && viewMode !== "split" ? `?view-mode=${viewMode}` : "";
     const url = `${path}${search}`;
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
-  }, [fullPreview, page, selectedProject?.id, selectedService, selectedService?.id]);
+  }, [page, selectedProject?.id, selectedService, selectedService?.id, viewMode]);
 
   const toggleProject = (projectId: string) => {
     setOpenProjects((current) => toggleSetValue(current, projectId));
@@ -232,6 +232,17 @@ function App() {
             <h1>API Spec Writer</h1>
             <p>Local project tree for service specs.</p>
           </div>
+          <div className="view-mode-control" aria-label="View mode">
+            <button className={viewMode === "split" ? "active" : ""} type="button" title="Editor and preview" aria-label="Editor and preview" onClick={() => setViewMode("split")}>
+              <Columns2 size={15} />
+            </button>
+            <button className={viewMode === "edit" ? "active" : ""} type="button" title="Editor only" aria-label="Editor only" onClick={() => setViewMode("edit")}>
+              <PanelLeft size={15} />
+            </button>
+            <button className={viewMode === "preview" ? "active" : ""} type="button" title="Preview only" aria-label="Preview only" onClick={() => setViewMode("preview")}>
+              <PanelRight size={15} />
+            </button>
+          </div>
         </div>
 
         <button className="primary wide" type="button" onClick={createProject}>
@@ -277,6 +288,7 @@ function App() {
             setSelectedServiceId(service.id);
             setPage("services");
           }}
+          showProjectActions={viewMode !== "preview"}
         />
         <div className="sidebar-actions">
           <button className="wide" type="button" onClick={exportProject} disabled={!selectedProject}>
@@ -307,7 +319,7 @@ function App() {
             <header className="workspace-header">
               <div className="workspace-path">
                 <p className="eyebrow">{workspacePathLabel(page, selectedProject, selectedService)}</p>
-                {page === "services" && selectedService ? (
+                {page === "services" && selectedService && viewMode !== "preview" ? (
                   <div className="workspace-actions">
                     <button type="button" onClick={renameService}>
                       <Edit3 size={13} /> Edit
@@ -321,15 +333,13 @@ function App() {
             </header>
 
             {page === "services" && (
-              <div className={fullPreview ? "service-editor-layout preview-only" : showDisplay ? "service-editor-layout" : "service-editor-layout display-off"}>
-                {!fullPreview && (
+              <div className={serviceLayoutClass(viewMode)}>
+                {viewMode !== "preview" && (
                   <section className="panel editor-panel">
                     {selectedService ? (
                       <ServiceEditor
                         spec={selectedService.spec}
                         projectErrorCodes={selectedProject.error_code}
-                        showPreview={showDisplay}
-                        onTogglePreview={() => setShowDisplay((current) => !current)}
                         onChange={updateServiceSpec}
                       />
                     ) : (
@@ -342,7 +352,7 @@ function App() {
                   </section>
                 )}
 
-                {(showDisplay || fullPreview) && (
+                {viewMode !== "edit" && (
                   <section className="panel preview-panel">
                     <div className="panel-title">
                       <div className="preview-title">
@@ -414,6 +424,19 @@ function workspacePathLabel(page: Page, project: Project, service: Service | und
   if (page === "errorCodes") return `PROJECTS / ${project.name} / ERROR`;
   if (service) return `PROJECTS / ${project.name} / SERVICE / ${service.name}`;
   return `PROJECTS / ${project.name} / SERVICE`;
+}
+
+function parseViewMode(searchParams: URLSearchParams): ViewMode {
+  const value = searchParams.get("view-mode");
+  if (value === "edit" || value === "preview") return value;
+  if (searchParams.get("preview") === "true") return "preview";
+  return "split";
+}
+
+function serviceLayoutClass(viewMode: ViewMode) {
+  if (viewMode === "edit") return "service-editor-layout edit-only";
+  if (viewMode === "preview") return "service-editor-layout preview-only";
+  return "service-editor-layout";
 }
 
 function toggleSetValue(current: Set<string>, value: string) {
