@@ -87,7 +87,7 @@ function OpenApiResponses({ responses }: { responses: Record<string, any> }) {
   return (
     <section className="openapi-section">
       <h3>Responses</h3>
-      {Object.entries(responses).map(([status, response]) => {
+      {Object.entries(responses).map(([status, response], index) => {
         const content = response.content?.["application/json"];
         return (
           <div className="openapi-response" key={status}>
@@ -95,7 +95,7 @@ function OpenApiResponses({ responses }: { responses: Record<string, any> }) {
               <span>{status}</span>
               <p>{response.description}</p>
             </div>
-            {content?.schema ? <SchemaTree schema={content.schema} /> : null}
+            {index === 0 && content?.schema ? <SchemaTree schema={content.schema} /> : null}
             {content?.examples ? <OpenApiExamples examples={content.examples} /> : null}
             {content?.example ? <pre>{JSON.stringify(content.example, null, 2)}</pre> : null}
           </div>
