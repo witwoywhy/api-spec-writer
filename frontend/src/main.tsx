@@ -4,11 +4,13 @@ import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeft, Pa
 import { localStorageProjectStore } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
+import { OpenApiPreview } from "./components/OpenApiPreview";
 import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
 import type { Project, Service, ServiceSpec, StoreDocument } from "./domain";
 import { buildAppPath, parseAppRoute } from "./lib/appRouter";
 import { uid } from "./lib/id";
+import { serviceOpenApi } from "./lib/openApiSpec";
 import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefaults";
 import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
@@ -36,6 +38,14 @@ function App() {
   const markdown = useMemo(
     () => selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
     [selectedProject?.error_code, selectedService],
+  );
+  const openApiDocument = useMemo(
+    () => selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
+    [selectedProject?.error_code, selectedService],
+  );
+  const openApiJson = useMemo(
+    () => selectedService ? JSON.stringify(openApiDocument, null, 2) : "",
+    [openApiDocument, selectedService],
   );
 
   const refreshStore = useCallback(async () => {
@@ -197,6 +207,11 @@ function App() {
     downloadFile(`${exportBaseName}.html`, buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html), "text/html;charset=utf-8");
   };
   const exportSelectedPreview = () => {
+    if (markdownMode === "openapi") {
+      if (!openApiJson.trim()) return;
+      downloadFile(`${exportBaseName}.openapi.json`, openApiJson, "application/json;charset=utf-8");
+      return;
+    }
     if (markdownMode === "html") {
       exportHtml();
       return;
@@ -361,7 +376,7 @@ function App() {
                           <option value="markdown">Markdown</option>
                           <option value="raw">Raw Markdown</option>
                           <option value="html">HTML</option>
-                          <option value="openapi" disabled>OpenAPI (wait implement)</option>
+                          <option value="openapi">OpenAPI</option>
                         </select>
                       </div>
                       <div className="preview-actions">
@@ -372,6 +387,8 @@ function App() {
                       <MarkdownPreview markdown={markdown} />
                     ) : markdownMode === "html" ? (
                       <HtmlPreview markdown={markdown} />
+                    ) : markdownMode === "openapi" ? (
+                      <OpenApiPreview document={openApiDocument} />
                     ) : (
                       <pre>{markdown || "Select a service to preview the spec."}</pre>
                     )}
