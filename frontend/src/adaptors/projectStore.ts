@@ -130,13 +130,17 @@ export const localStorageProjectStore: ProjectStoreAdaptor = {
 
   async createProject(project, fileName) {
     const index = readPersistedProjectIndex();
-    index.projects.push({
+    const projectRow = {
       id: project.id,
       name: project.name,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
       fileName,
-    });
+    };
+    index.projects = [
+      ...index.projects.filter((item) => item.id !== project.id),
+      projectRow,
+    ];
     writeProjectIndex(index);
     await writeProjectFile(project);
     return project;

@@ -18,6 +18,13 @@ import "./styles.css";
 type MarkdownMode = "markdown" | "html" | "openapi";
 type ViewMode = "split" | "edit" | "preview";
 type ProjectFilePicker = {
+  showOpenFilePicker?: (options?: {
+    multiple?: boolean;
+    types?: Array<{
+      description: string;
+      accept: Record<string, string[]>;
+    }>;
+  }) => Promise<ProjectFileHandle[]>;
   showSaveFilePicker?: (options?: {
     suggestedName?: string;
     types?: Array<{
@@ -45,7 +52,6 @@ function App() {
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
   const serviceLayoutRef = useRef<HTMLDivElement>(null);
   const htmlExportRef = useRef<HTMLDivElement>(null);
-  const importProjectInputRef = useRef<HTMLInputElement>(null);
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const markdown = useMemo(
@@ -246,10 +252,6 @@ function App() {
     }
     exportMarkdown();
   };
-  const exportProject = () => {
-    if (!selectedProject) return;
-    downloadFile(`${safeFileName(selectedProject.name)}.json`, JSON.stringify(selectedProject, null, 2), "application/json;charset=utf-8");
-  };
   const exportProjectPreview = () => {
     if (!selectedProject) return;
     const projectBaseName = safeFileName(selectedProject.name);
@@ -266,22 +268,19 @@ function App() {
 
     downloadFile(`${projectBaseName}.md`, projectMarkdown, "text/markdown;charset=utf-8");
   };
-  const importProject = async (file: File | undefined) => {
-    if (!file) return;
+  const importProject = async () => {
     try {
-      const imported = JSON.parse(await file.text()) as Project;
-      const project = cloneImportedProject(imported);
-      const fileName = await saveProjectFile(project);
-      if (!fileName) return;
-      await localStorageProjectStore.createProject(project, fileName);
+      const projectFile = await selectProjectFile();
+      if (!projectFile) return;
+      const project = validateProject(JSON.parse(await projectFile.file.text()) as Project);
+      await registerProjectFileHandle(project.id, projectFile.handle);
+      await localStorageProjectStore.createProject(project, projectFile.handle.name ?? projectFile.file.name);
       await refreshStore();
       setSelectedProjectId(project.id);
       setSelectedServiceId(project.services[0]?.id ?? "");
       setPage("services");
     } catch {
       window.alert("Project JSON is invalid.");
-    } finally {
-      if (importProjectInputRef.current) importProjectInputRef.current.value = "";
     }
   };
   return (
@@ -341,22 +340,12 @@ function App() {
           showProjectActions={viewMode !== "preview"}
         />
         <div className="sidebar-actions">
-          <button className="wide" type="button" onClick={exportProject} disabled={!selectedProject}>
-            <Download size={16} /> Export Project
-          </button>
           <button className="wide" type="button" onClick={exportProjectPreview} disabled={!selectedProject}>
             <Download size={16} /> Export Preview
           </button>
-          <button className="wide" type="button" onClick={() => importProjectInputRef.current?.click()}>
+          <button className="wide" type="button" onClick={() => void importProject()}>
             <Upload size={16} /> Import Project
           </button>
-          <input
-            ref={importProjectInputRef}
-            type="file"
-            accept="application/json,.json"
-            hidden
-            onChange={(event) => void importProject(event.target.files?.[0])}
-          />
         </div>
       </aside>
 
@@ -589,6 +578,29 @@ async function saveProjectFile(project: Project) {
   }
 }
 
+async function selectProjectFile() {
+  const picker = window as Window & ProjectFilePicker;
+  if (!picker.showOpenFilePicker) {
+    window.alert("Your browser does not support opening a project file.");
+    return null;
+  }
+
+  const [handle] = await picker.showOpenFilePicker({
+    multiple: false,
+    types: [
+      {
+        description: "API Spec Writer project",
+        accept: { "application/json": [".json"] },
+      },
+    ],
+  });
+  if (!handle) return null;
+  return {
+    handle,
+    file: await handle.getFile(),
+  };
+}
+
 function buildHtmlDocument(title: string, body: string) {
   return `<!doctype html>
 <html lang="en">
@@ -805,11 +817,15 @@ function escapeHtml(value: string) {
   return value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
 
-function cloneImportedProject(project: Project): Project {
+function validateProject(project: Project): Project {
   if (!project?.name || !Array.isArray(project.services) || !Array.isArray(project.event_code) || !Array.isArray(project.error_code)) {
     throw new Error("Invalid project");
   }
+  return project;
+}
 
+function cloneImportedProject(project: Project): Project {
+  validateProject(project);
   const timestamp = now();
   const errorCodeIds = new Map<string, string>();
   const errorCodeIdsByCode = new Map<string, string>();
