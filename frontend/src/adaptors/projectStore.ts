@@ -2,6 +2,8 @@ import type { ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, 
 
 const DOCUMENT_STORAGE_KEY = "api-spec-writer-platform:v1";
 const TABLE_STORAGE_KEY = "api-spec-writer-platform:tables:v1";
+const PROJECT_LIST_STORAGE_KEY = "api-spec-writer-platform:projects:v2";
+const PROJECT_DETAIL_STORAGE_PREFIX = "api-spec-writer-platform:project:v2:";
 const ARCHIVE_STORAGE_KEY = "api-spec-writer-platform:project-archive:v1";
 const SERVICE_ARCHIVE_STORAGE_KEY = "api-spec-writer-platform:service-archive:v1";
 
@@ -76,6 +78,22 @@ type ProjectTableDocument = {
   };
 };
 
+type ProjectListDocument = {
+  schemaVersion: 2;
+  projects: ProjectRow[];
+};
+
+type ProjectDetailDocument = {
+  schemaVersion: 2;
+  project_id: string;
+  project_name: string;
+  createdAt: string;
+  updatedAt: string;
+  event_code: EventCode[];
+  error_code: ErrorCode[];
+  services: Service[];
+};
+
 const emptyTableDocument: ProjectTableDocument = {
   schemaVersion: 1,
   tables: {
@@ -92,145 +110,253 @@ export const localStorageProjectStore: ProjectStoreAdaptor = {
   },
 
   async createProject(project) {
-    const tableDocument = readPersistedTableDocument();
-    tableDocument.tables.projects.push({
+    const index = readPersistedProjectIndex();
+    index.projects.push({
       id: project.id,
       name: project.name,
       createdAt: project.createdAt,
       updatedAt: project.updatedAt,
     });
-    tableDocument.tables.event_codes.push(...project.event_code.map((eventCode) => ({ ...eventCode, projectId: project.id })));
-    tableDocument.tables.error_codes.push(...project.error_code.map((errorCode) => ({ ...errorCode, projectId: project.id })));
-    tableDocument.tables.services.push(...project.services.map((service) => ({ ...service, projectId: project.id })));
-    writeTableDocument(tableDocument);
+    writeProjectIndex(index);
+    writeProjectDetail(projectToDetailDocument(project));
     return project;
   },
 
   async renameProject(projectId, name) {
-    const tableDocument = readPersistedTableDocument();
-    const project = tableDocument.tables.projects.find((item) => item.id === projectId);
-    if (!project) throw new Error("Project not found");
+    const index = readPersistedProjectIndex();
+    const projectRow = index.projects.find((item) => item.id === projectId);
+    const project = readProject(projectId);
+    if (!projectRow || !project) throw new Error("Project not found");
+    const updatedAt = nowIso();
+    projectRow.name = name;
+    projectRow.updatedAt = updatedAt;
     project.name = name;
-    project.updatedAt = nowIso();
-    writeTableDocument(tableDocument);
-    return tableRowsToProject(project, tableDocument);
+    project.updatedAt = updatedAt;
+    writeProjectIndex(index);
+    writeProjectDetail(projectToDetailDocument(project));
+    return project;
   },
 
   async archiveProject(projectId) {
-    const tableDocument = readPersistedTableDocument();
-    const project = tableDocument.tables.projects.find((item) => item.id === projectId);
+    const index = readPersistedProjectIndex();
+    const project = readProject(projectId);
     if (!project) throw new Error("Project not found");
-    appendArchivedProject(tableRowsToProject(project, tableDocument));
-    tableDocument.tables.projects = tableDocument.tables.projects.filter((item) => item.id !== projectId);
-    tableDocument.tables.event_codes = tableDocument.tables.event_codes.filter((eventCode) => eventCode.projectId !== projectId);
-    tableDocument.tables.error_codes = tableDocument.tables.error_codes.filter((errorCode) => errorCode.projectId !== projectId);
-    tableDocument.tables.services = tableDocument.tables.services.filter((service) => service.projectId !== projectId);
-    writeTableDocument(tableDocument);
+    appendArchivedProject(project);
+    index.projects = index.projects.filter((item) => item.id !== projectId);
+    writeProjectIndex(index);
+    localStorage.removeItem(projectDetailKey(projectId));
   },
 
   async createEventCode(projectId, eventCode) {
-    const tableDocument = readPersistedTableDocument();
-    tableDocument.tables.event_codes.push({ ...eventCode, projectId });
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
+    const project = requireProject(projectId);
+    project.event_code.push(eventCode);
+    writeTouchedProject(project);
     return eventCode;
   },
 
   async replaceEventCodes(projectId, eventCodes) {
-    const tableDocument = readPersistedTableDocument();
-    tableDocument.tables.event_codes = [
-      ...tableDocument.tables.event_codes.filter((eventCode) => eventCode.projectId !== projectId),
-      ...eventCodes.map((eventCode) => ({ ...eventCode, projectId })),
-    ];
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
+    const project = requireProject(projectId);
+    project.event_code = eventCodes;
+    writeTouchedProject(project);
     return eventCodes;
   },
 
   async createErrorCode(projectId, errorCode) {
-    const tableDocument = readPersistedTableDocument();
-    tableDocument.tables.error_codes.push({ ...errorCode, projectId });
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
+    const project = requireProject(projectId);
+    project.error_code.push(errorCode);
+    writeTouchedProject(project);
     return errorCode;
   },
 
   async replaceErrorCodes(projectId, errorCodes) {
-    const tableDocument = readPersistedTableDocument();
-    tableDocument.tables.error_codes = [
-      ...tableDocument.tables.error_codes.filter((errorCode) => errorCode.projectId !== projectId),
-      ...errorCodes.map((errorCode) => ({ ...errorCode, projectId })),
-    ];
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
+    const project = requireProject(projectId);
+    project.error_code = errorCodes;
+    writeTouchedProject(project);
     return errorCodes;
   },
 
   async createService(projectId, service) {
-    const tableDocument = readPersistedTableDocument();
-    tableDocument.tables.services.push({ ...service, projectId });
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
+    const project = requireProject(projectId);
+    project.services.push(service);
+    writeTouchedProject(project);
     return service;
   },
 
   async renameService(projectId, serviceId, name) {
-    const tableDocument = readPersistedTableDocument();
-    const service = tableDocument.tables.services.find((item) => item.projectId === projectId && item.id === serviceId);
+    const project = requireProject(projectId);
+    const service = project.services.find((item) => item.id === serviceId);
     if (!service) throw new Error("Service not found");
     service.name = name;
     service.spec = { ...service.spec, name };
     service.updatedAt = nowIso();
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
-    const { projectId: _projectId, ...domainService } = service;
-    return domainService;
+    writeTouchedProject(project);
+    return service;
   },
 
   async archiveService(projectId, serviceId) {
-    const tableDocument = readPersistedTableDocument();
-    const service = tableDocument.tables.services.find((item) => item.projectId === projectId && item.id === serviceId);
+    const project = requireProject(projectId);
+    const service = project.services.find((item) => item.id === serviceId);
     if (!service) throw new Error("Service not found");
-    appendArchivedService(service);
-    tableDocument.tables.services = tableDocument.tables.services.filter((item) => item.projectId !== projectId || item.id !== serviceId);
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
+    appendArchivedService({ ...service, projectId });
+    project.services = project.services.filter((item) => item.id !== serviceId);
+    writeTouchedProject(project);
   },
 
   async updateServiceSpec(projectId, serviceId, spec) {
-    const tableDocument = readPersistedTableDocument();
-    const service = tableDocument.tables.services.find((item) => item.projectId === projectId && item.id === serviceId);
+    const project = requireProject(projectId);
+    const service = project.services.find((item) => item.id === serviceId);
     if (!service) throw new Error("Service not found");
     service.name = spec.name || service.name;
     service.spec = spec;
     service.updatedAt = nowIso();
-    touchProject(tableDocument, projectId);
-    writeTableDocument(tableDocument);
-    const { projectId: _projectId, ...domainService } = service;
-    return domainService;
+    writeTouchedProject(project);
+    return service;
   },
 };
 
 function readStoreSnapshot() {
+  const projectIndex = readProjectIndex();
+  if (projectIndex) return projectIndexToStore(projectIndex);
+
   const tableDocument = readTableDocument();
-  if (tableDocument) return tableDocumentToStore(tableDocument);
+  if (tableDocument) {
+    const store = tableDocumentToStore(tableDocument);
+    writeStoreAsProjectDocuments(store);
+    return store;
+  }
 
   const legacyDocument = readLegacyDocument();
   if (!legacyDocument) return emptyStore;
-  const migratedTableDocument = storeToTableDocument(legacyDocument);
-  writeTableDocument(migratedTableDocument);
+  writeStoreAsProjectDocuments(legacyDocument);
   return legacyDocument;
 }
 
-function readPersistedTableDocument() {
-    const tableDocument = readTableDocument();
-    if (tableDocument) return tableDocument;
+function readPersistedProjectIndex(): ProjectListDocument {
+  const projectIndex = readProjectIndex();
+  if (projectIndex) return projectIndex;
 
-    const legacyDocument = readLegacyDocument();
-    if (!legacyDocument) return emptyTableDocument;
-    const migratedTableDocument = storeToTableDocument(legacyDocument);
-    writeTableDocument(migratedTableDocument);
-    return migratedTableDocument;
+  const snapshot = readStoreSnapshot();
+  return {
+    schemaVersion: 2,
+    projects: snapshot.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    })),
+  };
+}
+
+function readProjectIndex(): ProjectListDocument | null {
+  const raw = localStorage.getItem(PROJECT_LIST_STORAGE_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as ProjectListDocument;
+    return {
+      schemaVersion: 2,
+      projects: Array.isArray(parsed.projects) ? parsed.projects : [],
+    } satisfies ProjectListDocument;
+  } catch {
+    return null;
+  }
+}
+
+function writeProjectIndex(projectIndex: ProjectListDocument) {
+  localStorage.setItem(PROJECT_LIST_STORAGE_KEY, JSON.stringify(projectIndex));
+}
+
+function projectDetailKey(projectId: string) {
+  return `${PROJECT_DETAIL_STORAGE_PREFIX}${projectId}`;
+}
+
+function readProject(projectId: string) {
+  const raw = localStorage.getItem(projectDetailKey(projectId));
+  if (!raw) return null;
+  try {
+    return detailDocumentToProject(JSON.parse(raw) as ProjectDetailDocument);
+  } catch {
+    return null;
+  }
+}
+
+function requireProject(projectId: string) {
+  const project = readProject(projectId);
+  if (!project) throw new Error("Project not found");
+  return project;
+}
+
+function writeProjectDetail(projectDetail: ProjectDetailDocument) {
+  localStorage.setItem(projectDetailKey(projectDetail.project_id), JSON.stringify(projectDetail));
+}
+
+function writeTouchedProject(project: Project) {
+  const updatedAt = nowIso();
+  project.updatedAt = updatedAt;
+  const index = readPersistedProjectIndex();
+  const projectRow = index.projects.find((item) => item.id === project.id);
+  if (projectRow) {
+    projectRow.name = project.name;
+    projectRow.updatedAt = updatedAt;
+    writeProjectIndex(index);
+  }
+  writeProjectDetail(projectToDetailDocument(project));
+}
+
+function projectToDetailDocument(project: Project): ProjectDetailDocument {
+  return {
+    schemaVersion: 2,
+    project_id: project.id,
+    project_name: project.name,
+    createdAt: project.createdAt,
+    updatedAt: project.updatedAt,
+    event_code: project.event_code,
+    error_code: project.error_code,
+    services: project.services,
+  };
+}
+
+function detailDocumentToProject(projectDetail: ProjectDetailDocument): Project {
+  return {
+    id: projectDetail.project_id,
+    name: projectDetail.project_name,
+    createdAt: projectDetail.createdAt,
+    updatedAt: projectDetail.updatedAt,
+    event_code: Array.isArray(projectDetail.event_code) ? projectDetail.event_code : [],
+    error_code: Array.isArray(projectDetail.error_code) ? projectDetail.error_code.map(normalizeErrorCode) : [],
+    services: Array.isArray(projectDetail.services) ? projectDetail.services.map(normalizeService) : [],
+  };
+}
+
+function projectIndexToStore(projectIndex: ProjectListDocument): StoreDocument {
+  return {
+    schemaVersion: 1,
+    projects: projectIndex.projects.flatMap((project) => {
+      const detail = readProject(project.id);
+      if (detail) return [detail];
+      return [{
+        id: project.id,
+        name: project.name,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        event_code: [],
+        error_code: [],
+        services: [],
+      }];
+    }),
+  };
+}
+
+function writeStoreAsProjectDocuments(store: StoreDocument) {
+  writeProjectIndex({
+    schemaVersion: 2,
+    projects: store.projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      createdAt: project.createdAt,
+      updatedAt: project.updatedAt,
+    })),
+  });
+  for (const project of store.projects) writeProjectDetail(projectToDetailDocument(project));
 }
 
 function readTableDocument() {
