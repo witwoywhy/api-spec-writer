@@ -1,7 +1,7 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
-import { localStorageProjectStore } from "./adaptors/projectStore";
+import { localStorageProjectStore, registerProjectFileHandle, type ProjectFileHandle } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
 import { OpenApiPreview } from "./components/OpenApiPreview";
@@ -17,6 +17,15 @@ import "./styles.css";
 
 type MarkdownMode = "markdown" | "html" | "openapi";
 type ViewMode = "split" | "edit" | "preview";
+type ProjectFilePicker = {
+  showSaveFilePicker?: (options?: {
+    suggestedName?: string;
+    types?: Array<{
+      description: string;
+      accept: Record<string, string[]>;
+    }>;
+  }) => Promise<ProjectFileHandle>;
+};
 
 const now = () => new Date().toISOString();
 const PREVIEW_TYPE_STORAGE_KEY = "api-spec-writer-platform:preview-type";
@@ -124,7 +133,9 @@ function App() {
       createdAt: timestamp,
       updatedAt: timestamp,
     };
-    await localStorageProjectStore.createProject(project);
+    const fileName = await saveProjectFile(project);
+    if (!fileName) return;
+    await localStorageProjectStore.createProject(project, fileName);
     await refreshStore();
     setSelectedProjectId(project.id);
     setSelectedServiceId(service.id);
@@ -260,7 +271,9 @@ function App() {
     try {
       const imported = JSON.parse(await file.text()) as Project;
       const project = cloneImportedProject(imported);
-      await localStorageProjectStore.createProject(project);
+      const fileName = await saveProjectFile(project);
+      if (!fileName) return;
+      await localStorageProjectStore.createProject(project, fileName);
       await refreshStore();
       setSelectedProjectId(project.id);
       setSelectedServiceId(project.services[0]?.id ?? "");
@@ -545,6 +558,35 @@ function downloadFile(fileName: string, content: string, type: string) {
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+async function saveProjectFile(project: Project) {
+  const picker = window as Window & ProjectFilePicker;
+  if (!picker.showSaveFilePicker) {
+    window.alert("Your browser does not support choosing a project file location.");
+    return "";
+  }
+
+  try {
+    const fileHandle = await picker.showSaveFilePicker({
+      suggestedName: `${safeFileName(project.name)}.json`,
+      types: [
+        {
+          description: "API Spec Writer project",
+          accept: { "application/json": [".json"] },
+        },
+      ],
+    });
+    const writable = await fileHandle.createWritable();
+    await writable.write(JSON.stringify(project, null, 2));
+    await writable.close();
+    await registerProjectFileHandle(project.id, fileHandle);
+    return fileHandle.name ?? `${safeFileName(project.name)}.json`;
+  } catch (reason) {
+    if (reason instanceof DOMException && reason.name === "AbortError") return "";
+    window.alert("Cannot save project file. The project was not created.");
+    return "";
+  }
 }
 
 function buildHtmlDocument(title: string, body: string) {
