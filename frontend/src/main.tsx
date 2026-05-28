@@ -9,13 +9,14 @@ import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
 import type { ErrorCode, EventCode, Project, Service, ServiceSpec, StoreDocument } from "./domain";
 import { buildAppPath, parseAppRoute } from "./lib/appRouter";
+import { serviceGoStruct } from "./lib/goStructPreview";
 import { uid } from "./lib/id";
 import { serviceOpenApi } from "./lib/openApiSpec";
 import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefaults";
 import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
 
-type MarkdownMode = "markdown" | "html" | "openapi";
+type MarkdownMode = "markdown" | "html" | "openapi" | "gostruct";
 type ViewMode = "split" | "edit" | "preview";
 type ProjectFilePicker = {
   showOpenFilePicker?: (options?: {
@@ -73,6 +74,10 @@ function App() {
   const openApiJson = useMemo(
     () => openApiDocument ? JSON.stringify(openApiDocument, null, 2) : "",
     [openApiDocument],
+  );
+  const goStruct = useMemo(
+    () => shouldRenderServicePreview && markdownMode === "gostruct" && selectedService ? serviceGoStruct(selectedService.spec) : "",
+    [markdownMode, selectedService, shouldRenderServicePreview],
   );
 
   const clearProjectSaveTimer = useCallback((projectId: string) => {
@@ -369,6 +374,11 @@ function App() {
       downloadFile(`${exportBaseName}.openapi.json`, openApiJson, "application/json;charset=utf-8");
       return;
     }
+    if (markdownMode === "gostruct") {
+      if (!goStruct.trim()) return;
+      downloadFile(`${exportBaseName}.go`, goStruct, "text/plain;charset=utf-8");
+      return;
+    }
     if (markdownMode === "html") {
       exportHtml();
       return;
@@ -380,6 +390,15 @@ function App() {
     const projectBaseName = safeFileName(selectedProject.name);
     if (markdownMode === "openapi") {
       downloadFile(`${projectBaseName}.openapi.json`, JSON.stringify(projectOpenApi(selectedProject), null, 2), "application/json;charset=utf-8");
+      return;
+    }
+    if (markdownMode === "gostruct") {
+      const content = selectedProject.services
+        .map((service) => `// ${service.spec.name || service.name}\n${serviceGoStruct(service.spec)}`)
+        .filter((section) => section.trim())
+        .join("\n\n");
+      if (!content.trim()) return;
+      downloadFile(`${projectBaseName}.go`, content, "text/plain;charset=utf-8");
       return;
     }
 
@@ -565,6 +584,7 @@ function App() {
                           <option value="markdown">Markdown</option>
                           <option value="html">HTML</option>
                           <option value="openapi">OpenAPI</option>
+                          <option value="gostruct">Go Struct</option>
                         </select>
                       </div>
                       <div className="preview-actions">
@@ -579,6 +599,8 @@ function App() {
                       </div>
                     ) : markdownMode === "openapi" ? (
                       <OpenApiPreview document={openApiDocument} />
+                    ) : markdownMode === "gostruct" ? (
+                      <GoStructPreview content={goStruct} />
                     ) : (
                       <MarkdownPreview markdown={markdown} />
                     )}
@@ -727,8 +749,17 @@ function parseViewMode(searchParams: URLSearchParams): ViewMode {
 
 function parseMarkdownMode(searchParams: URLSearchParams, storedValue: string | null): MarkdownMode {
   const value = searchParams.get("preview-type") ?? storedValue;
-  if (value === "html" || value === "openapi") return value;
+  if (value === "html" || value === "openapi" || value === "gostruct") return value;
   return "markdown";
+}
+
+function GoStructPreview({ content }: { content: string }) {
+  if (!content.trim()) return <div className="markdown-preview empty-preview">Request and response BODY fields are required for Go struct preview.</div>;
+  return (
+    <div className="markdown-preview">
+      <pre><code>{content}</code></pre>
+    </div>
+  );
 }
 
 function serviceSearchParams(viewMode: ViewMode) {
