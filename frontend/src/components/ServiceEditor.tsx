@@ -1,5 +1,5 @@
 import { Edit3, Plus, Trash2 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type TextareaHTMLAttributes, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
@@ -60,7 +60,7 @@ export function ServiceEditor({
             </>
           )}
           <Label text="Authentication"><input value={spec.authentication} onChange={(event) => patch({ authentication: event.target.value })} /></Label>
-          <Label text="Description" wide><textarea value={spec.description} onChange={(event) => patch({ description: event.target.value })} /></Label>
+          <Label text="Description" wide><SmartTextarea value={spec.description} onChangeValue={(value) => patch({ description: value })} /></Label>
         </div>
       </Fieldset>
 
@@ -87,7 +87,7 @@ export function ServiceEditor({
       </Fieldset>
 
       <Fieldset title="Sequence Diagram">
-        <Label text="Mermaid"><textarea className="tall" value={spec.sequence} onChange={(event) => patch({ sequence: event.target.value })} /></Label>
+        <Label text="Mermaid"><SmartTextarea className="tall" value={spec.sequence} onChangeValue={(value) => patch({ sequence: value })} /></Label>
       </Fieldset>
 
       <Fieldset title="Errors">
@@ -259,7 +259,7 @@ function FieldRows({
                     </button>
                   )}
                 </div>
-                <textarea value={exampleValue ?? ""} onChange={(event) => onExampleChange(event.target.value)} />
+                <SmartTextarea value={exampleValue ?? ""} onChangeValue={onExampleChange} />
               </div>
             )}
           </div>
@@ -375,7 +375,7 @@ function ExampleCases({
               <Trash2 size={16} />
             </button>
           </div>
-          <textarea value={selectedExample.value} onChange={(event) => updateExample(selectedExample.id, { value: event.target.value })} />
+          <SmartTextarea value={selectedExample.value} onChangeValue={(value) => updateExample(selectedExample.id, { value })} />
         </div>
       ) : (
         <button
@@ -422,6 +422,64 @@ function ServiceErrorRow({
       <input value={resolved.description_th} placeholder="รายละเอียดภาษาไทย" readOnly />
       <IconButton label="Remove error" onClick={onRemove} />
     </div>
+  );
+}
+
+function SmartTextarea({
+  value,
+  onChangeValue,
+  ...props
+}: Omit<TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value"> & {
+  value: string;
+  onChangeValue: (value: string) => void;
+}) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+  const selectionRef = useRef<{ start: number; end: number } | null>(null);
+
+  useLayoutEffect(() => {
+    const selection = selectionRef.current;
+    const textarea = ref.current;
+    if (!selection || !textarea) return;
+    textarea.setSelectionRange(selection.start, selection.end);
+    selectionRef.current = null;
+  }, [value]);
+
+  const insertText = (text: string) => {
+    const textarea = ref.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const nextValue = `${value.slice(0, start)}${text}${value.slice(end)}`;
+    const nextCursor = start + text.length;
+    selectionRef.current = { start: nextCursor, end: nextCursor };
+    onChangeValue(nextValue);
+  };
+
+  return (
+    <textarea
+      {...props}
+      ref={ref}
+      value={value}
+      onChange={(event) => {
+        selectionRef.current = {
+          start: event.target.selectionStart,
+          end: event.target.selectionEnd,
+        };
+        onChangeValue(event.target.value);
+      }}
+      onKeyDown={(event) => {
+        props.onKeyDown?.(event);
+        if (event.defaultPrevented) return;
+        if (event.key === "Tab") {
+          event.preventDefault();
+          insertText("  ");
+        }
+        if (event.key === "\"" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+          event.preventDefault();
+          insertText("\"");
+        }
+      }}
+    />
   );
 }
 
