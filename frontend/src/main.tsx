@@ -36,6 +36,7 @@ type ProjectFilePicker = {
 
 const now = () => new Date().toISOString();
 const PREVIEW_TYPE_STORAGE_KEY = "api-spec-writer-platform:preview-type";
+const PROJECT_DRAFT_STORAGE_PREFIX = "api-spec-writer-platform:project-draft:v1:";
 const initialRoute = parseAppRoute(window.location.pathname);
 const initialViewMode = parseViewMode(new URLSearchParams(window.location.search));
 const initialMarkdownMode = parseMarkdownMode(new URLSearchParams(window.location.search), localStorage.getItem(PREVIEW_TYPE_STORAGE_KEY));
@@ -55,12 +56,15 @@ function App() {
   const htmlExportRef = useRef<HTMLDivElement>(null);
   const latestStoreRef = useRef(store);
   const projectSaveTimersRef = useRef<Map<string, number>>(new Map());
+  const pendingProjectSnapshotsRef = useRef<Map<string, Project>>(new Map());
+  const projectSaveChainsRef = useRef<Map<string, Promise<void>>>(new Map());
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
   const shouldRenderServicePreview = page === "services" && viewMode !== "edit" && Boolean(selectedService);
+  const shouldBuildMarkdown = shouldRenderServicePreview && (markdownMode === "markdown" || markdownMode === "html");
   const markdown = useMemo(
-    () => shouldRenderServicePreview && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
-    [selectedProject?.error_code, selectedService, shouldRenderServicePreview],
+    () => shouldBuildMarkdown && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
+    [selectedProject?.error_code, selectedService, shouldBuildMarkdown],
   );
   const openApiDocument = useMemo(
     () => shouldRenderServicePreview && markdownMode === "openapi" && selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
@@ -71,14 +75,6 @@ function App() {
     [openApiDocument],
   );
 
-  const applyStoreChange = useCallback((updater: (current: StoreDocument) => StoreDocument) => {
-    setStore((current) => {
-      const next = updater(current);
-      latestStoreRef.current = next;
-      return next;
-    });
-  }, []);
-
   const clearProjectSaveTimer = useCallback((projectId: string) => {
     const timer = projectSaveTimersRef.current.get(projectId);
     if (!timer) return;
@@ -86,22 +82,38 @@ function App() {
     projectSaveTimersRef.current.delete(projectId);
   }, []);
 
-  const persistProjectNow = useCallback(async (projectId: string) => {
-    clearProjectSaveTimer(projectId);
-    const project = latestStoreRef.current.projects.find((item) => item.id === projectId);
-    if (!project) return;
-    try {
+  const persistProjectSnapshot = useCallback(async (project: Project) => {
+    const previousSave = projectSaveChainsRef.current.get(project.id) ?? Promise.resolve();
+    const nextSave = previousSave.catch(() => undefined).then(async () => {
       await localStorageProjectStore.saveProject(project);
+      const pending = pendingProjectSnapshotsRef.current.get(project.id);
+      if (!pending || pending.updatedAt === project.updatedAt) {
+        pendingProjectSnapshotsRef.current.delete(project.id);
+        removeProjectDraft(project.id);
+      }
+    });
+    projectSaveChainsRef.current.set(project.id, nextSave);
+    try {
+      await nextSave;
       setSaveError("");
     } catch (reason) {
       console.error("Unable to save project changes", reason);
       setSaveError("Changes are not saved. Check project file permission.");
       throw reason;
+    } finally {
+      if (projectSaveChainsRef.current.get(project.id) === nextSave) projectSaveChainsRef.current.delete(project.id);
     }
-  }, [clearProjectSaveTimer]);
+  }, []);
+
+  const persistProjectNow = useCallback(async (projectId: string) => {
+    clearProjectSaveTimer(projectId);
+    const project = pendingProjectSnapshotsRef.current.get(projectId) ?? latestStoreRef.current.projects.find((item) => item.id === projectId);
+    if (!project) return;
+    await persistProjectSnapshot(project);
+  }, [clearProjectSaveTimer, persistProjectSnapshot]);
 
   const flushPendingProjectSave = useCallback(async (projectId: string) => {
-    if (!projectSaveTimersRef.current.has(projectId)) return true;
+    if (!projectSaveTimersRef.current.has(projectId) && !pendingProjectSnapshotsRef.current.has(projectId)) return true;
     try {
       await persistProjectNow(projectId);
       return true;
@@ -109,6 +121,16 @@ function App() {
       return false;
     }
   }, [persistProjectNow]);
+
+  const flushPendingProjectSaves = useCallback(async () => {
+    const projectIds = new Set([
+      ...projectSaveTimersRef.current.keys(),
+      ...pendingProjectSnapshotsRef.current.keys(),
+    ]);
+    if (projectIds.size === 0) return true;
+    const results = await Promise.all(Array.from(projectIds, (projectId) => flushPendingProjectSave(projectId)));
+    return results.every(Boolean);
+  }, [flushPendingProjectSave]);
 
   const scheduleProjectSave = useCallback((projectId: string) => {
     clearProjectSaveTimer(projectId);
@@ -119,8 +141,19 @@ function App() {
     projectSaveTimersRef.current.set(projectId, timer);
   }, [clearProjectSaveTimer, persistProjectNow]);
 
+  const applyProjectChange = useCallback((projectId: string, updater: (current: StoreDocument) => StoreDocument) => {
+    const next = updater(latestStoreRef.current);
+    latestStoreRef.current = next;
+    setStore(next);
+    const project = next.projects.find((item) => item.id === projectId);
+    if (!project) return;
+    pendingProjectSnapshotsRef.current.set(projectId, project);
+    writeProjectDraft(project);
+    scheduleProjectSave(projectId);
+  }, [scheduleProjectSave]);
+
   const refreshStore = useCallback(async () => {
-    const snapshot = await localStorageProjectStore.getSnapshot();
+    const snapshot = mergeProjectDrafts(await localStorageProjectStore.getSnapshot());
     latestStoreRef.current = snapshot;
     setStore(snapshot);
     setSelectedProjectId((current) => {
@@ -147,6 +180,28 @@ function App() {
       projectSaveTimersRef.current.clear();
     };
   }, []);
+
+  useEffect(() => {
+    const hasPendingSaves = () => projectSaveTimersRef.current.size > 0 || pendingProjectSnapshotsRef.current.size > 0;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasPendingSaves()) return;
+      event.preventDefault();
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") void flushPendingProjectSaves();
+    };
+    const onWindowBlur = () => {
+      void flushPendingProjectSaves();
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
+    window.addEventListener("blur", onWindowBlur);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("beforeunload", onBeforeUnload);
+      window.removeEventListener("blur", onWindowBlur);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [flushPendingProjectSaves]);
 
   useEffect(() => {
     localStorage.setItem(PREVIEW_TYPE_STORAGE_KEY, markdownMode);
@@ -186,6 +241,7 @@ function App() {
   };
 
   const createProject = async () => {
+    if (!await flushPendingProjectSaves()) return;
     const name = window.prompt("Project name");
     if (!name?.trim()) return;
     const timestamp = now();
@@ -287,8 +343,7 @@ function App() {
     if (!selectedProject || !selectedService) return;
     const projectId = selectedProject.id;
     const serviceId = selectedService.id;
-    applyStoreChange((current) => updateServiceSpecInStore(current, projectId, serviceId, updater));
-    scheduleProjectSave(projectId);
+    applyProjectChange(projectId, (current) => updateServiceSpecInStore(current, projectId, serviceId, updater));
   };
   const resizeSplitPanels = (clientX: number) => {
     const rect = serviceLayoutRef.current?.getBoundingClientRect();
@@ -337,10 +392,12 @@ function App() {
     downloadFile(`${projectBaseName}.md`, projectMarkdown, "text/markdown;charset=utf-8");
   };
   const importProject = async () => {
+    if (!await flushPendingProjectSaves()) return;
     try {
       const projectFile = await selectProjectFile();
       if (!projectFile) return;
       const project = validateProject(JSON.parse(await projectFile.file.text()) as Project);
+      removeProjectDraft(project.id);
       await registerProjectFileHandle(project.id, projectFile.handle);
       await localStorageProjectStore.createProject(project, projectFile.handle.name ?? projectFile.file.name);
       await refreshStore();
@@ -535,8 +592,7 @@ function App() {
                 rows={selectedProject.event_code}
                 onAdd={addEventCode}
                 onChange={(eventCodes) => {
-                  applyStoreChange((current) => replaceEventCodesInStore(current, selectedProject.id, eventCodes));
-                  scheduleProjectSave(selectedProject.id);
+                  applyProjectChange(selectedProject.id, (current) => replaceEventCodesInStore(current, selectedProject.id, eventCodes));
                 }}
               />
             )}
@@ -547,8 +603,7 @@ function App() {
                 onAddDomain={addErrorDomain}
                 onAddErrorCode={addErrorCode}
                 onChange={(errorCodes) => {
-                  applyStoreChange((current) => replaceErrorCodesInStore(current, selectedProject.id, errorCodes));
-                  scheduleProjectSave(selectedProject.id);
+                  applyProjectChange(selectedProject.id, (current) => replaceErrorCodesInStore(current, selectedProject.id, errorCodes));
                 }}
               />
             )}
@@ -563,6 +618,48 @@ function mergeOpenIds(current: Set<string>, ids: string[]) {
   const next = new Set(current);
   for (const id of ids) next.add(id);
   return next;
+}
+
+type ProjectDraft = {
+  schemaVersion: 1;
+  savedAt: string;
+  project: Project;
+};
+
+function projectDraftKey(projectId: string) {
+  return `${PROJECT_DRAFT_STORAGE_PREFIX}${projectId}`;
+}
+
+function writeProjectDraft(project: Project) {
+  const draft: ProjectDraft = {
+    schemaVersion: 1,
+    savedAt: now(),
+    project,
+  };
+  localStorage.setItem(projectDraftKey(project.id), JSON.stringify(draft));
+}
+
+function removeProjectDraft(projectId: string) {
+  localStorage.removeItem(projectDraftKey(projectId));
+}
+
+function readProjectDraft(projectId: string) {
+  const raw = localStorage.getItem(projectDraftKey(projectId));
+  if (!raw) return null;
+  try {
+    const draft = JSON.parse(raw) as ProjectDraft;
+    if (draft.schemaVersion !== 1 || draft.project?.id !== projectId) return null;
+    return draft.project;
+  } catch {
+    return null;
+  }
+}
+
+function mergeProjectDrafts(store: StoreDocument): StoreDocument {
+  return {
+    ...store,
+    projects: store.projects.map((project) => readProjectDraft(project.id) ?? project),
+  };
 }
 
 function updateServiceSpecInStore(
