@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Plus } from "lucide-react";
 import type { ErrorCode, EventCode } from "../domain";
 import { IconButton } from "./ui";
@@ -57,13 +57,16 @@ export function ErrorCodesPage({
       return next;
     });
   };
-  const groups = rows.reduce<Array<{ domain: string; rows: ErrorCode[] }>>((items, row) => {
-    const domain = row.domain || "general";
-    const group = items.find((item) => item.domain === domain);
-    if (group) group.rows.push(row);
-    else items.push({ domain, rows: [row] });
-    return items;
-  }, []);
+  const groups = useMemo(() => {
+    const groupsByDomain = new Map<string, ErrorCode[]>();
+    for (const row of rows) {
+      const domain = row.domain || "general";
+      const groupRows = groupsByDomain.get(domain);
+      if (groupRows) groupRows.push(row);
+      else groupsByDomain.set(domain, [row]);
+    }
+    return Array.from(groupsByDomain, ([domain, groupRows]) => ({ domain, rows: groupRows }));
+  }, [rows]);
 
   return (
     <section className="panel code-page">

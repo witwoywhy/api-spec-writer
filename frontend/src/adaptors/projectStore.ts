@@ -12,6 +12,7 @@ const SERVICE_ARCHIVE_STORAGE_KEY = "api-spec-writer-platform:service-archive:v1
 export type ProjectStoreAdaptor = {
   getSnapshot(): Promise<StoreDocument>;
   createProject(project: Project, fileName?: string): Promise<Project>;
+  saveProject(project: Project): Promise<Project>;
   renameProject(projectId: string, name: string): Promise<Project>;
   archiveProject(projectId: string): Promise<void>;
   createEventCode(projectId: string, eventCode: EventCode): Promise<EventCode>;
@@ -144,6 +145,26 @@ export const localStorageProjectStore: ProjectStoreAdaptor = {
     writeProjectIndex(index);
     await writeProjectFile(project);
     return project;
+  },
+
+  async saveProject(project) {
+    const normalizedProject = normalizeProject(project);
+    const index = readPersistedProjectIndex();
+    const currentRowIndex = index.projects.findIndex((item) => item.id === normalizedProject.id);
+    const currentRow = index.projects[currentRowIndex];
+    const projectRow = {
+      id: normalizedProject.id,
+      name: normalizedProject.name,
+      createdAt: normalizedProject.createdAt,
+      updatedAt: normalizedProject.updatedAt,
+      fileName: currentRow?.fileName,
+    };
+    index.projects = currentRowIndex >= 0
+      ? index.projects.map((item, index) => index === currentRowIndex ? projectRow : item)
+      : [...index.projects, projectRow];
+    writeProjectIndex(index);
+    await writeProjectFile(normalizedProject);
+    return normalizedProject;
   },
 
   async renameProject(projectId, name) {
@@ -322,7 +343,13 @@ function writeProjectDetail(projectDetail: ProjectDetailDocument) {
 
 async function writeProjectFile(project: Project) {
   const handle = await getProjectFileHandle(project.id);
-  if (!handle) throw new Error("Project file not found");
+  if (!handle) {
+    if (localStorage.getItem(projectDetailKey(project.id))) {
+      writeProjectDetail(projectToDetailDocument(project));
+      return;
+    }
+    throw new Error("Project file not found");
+  }
   const permitted = await ensureProjectFilePermission(handle, "readwrite");
   if (!permitted) throw new Error("Project file permission denied");
   const writable = await handle.createWritable();
@@ -382,15 +409,14 @@ function normalizeProject(project: Project): Project {
 }
 
 async function projectIndexToStore(projectIndex: ProjectListDocument): Promise<StoreDocument> {
-  const projects: Project[] = [];
-  for (const project of projectIndex.projects) {
+  const projects = await Promise.all(projectIndex.projects.map(async (project) => {
     let detail: Project | null = null;
     try {
       detail = await readProject(project.id);
     } catch {
       detail = null;
     }
-    projects.push(detail ?? {
+    return detail ?? {
       id: project.id,
       name: project.name,
       createdAt: project.createdAt,
@@ -398,8 +424,8 @@ async function projectIndexToStore(projectIndex: ProjectListDocument): Promise<S
       event_code: [],
       error_code: [],
       services: [],
-    });
-  }
+    };
+  }));
   return {
     schemaVersion: 1,
     projects,

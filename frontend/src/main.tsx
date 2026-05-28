@@ -7,7 +7,7 @@ import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
 import { OpenApiPreview } from "./components/OpenApiPreview";
 import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
-import type { Project, Service, ServiceSpec, StoreDocument } from "./domain";
+import type { ErrorCode, EventCode, Project, Service, ServiceSpec, StoreDocument } from "./domain";
 import { buildAppPath, parseAppRoute } from "./lib/appRouter";
 import { uid } from "./lib/id";
 import { serviceOpenApi } from "./lib/openApiSpec";
@@ -48,27 +48,80 @@ function App() {
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>(initialMarkdownMode);
   const [editorWidth, setEditorWidth] = useState(58);
+  const [saveError, setSaveError] = useState("");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
   const serviceLayoutRef = useRef<HTMLDivElement>(null);
   const htmlExportRef = useRef<HTMLDivElement>(null);
+  const latestStoreRef = useRef(store);
+  const projectSaveTimersRef = useRef<Map<string, number>>(new Map());
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
+  const shouldRenderServicePreview = page === "services" && viewMode !== "edit" && Boolean(selectedService);
   const markdown = useMemo(
-    () => selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
-    [selectedProject?.error_code, selectedService],
+    () => shouldRenderServicePreview && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
+    [selectedProject?.error_code, selectedService, shouldRenderServicePreview],
   );
   const openApiDocument = useMemo(
-    () => selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
-    [selectedProject?.error_code, selectedService],
+    () => shouldRenderServicePreview && markdownMode === "openapi" && selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
+    [markdownMode, selectedProject?.error_code, selectedService, shouldRenderServicePreview],
   );
   const openApiJson = useMemo(
-    () => selectedService ? JSON.stringify(openApiDocument, null, 2) : "",
-    [openApiDocument, selectedService],
+    () => openApiDocument ? JSON.stringify(openApiDocument, null, 2) : "",
+    [openApiDocument],
   );
+
+  const applyStoreChange = useCallback((updater: (current: StoreDocument) => StoreDocument) => {
+    setStore((current) => {
+      const next = updater(current);
+      latestStoreRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const clearProjectSaveTimer = useCallback((projectId: string) => {
+    const timer = projectSaveTimersRef.current.get(projectId);
+    if (!timer) return;
+    window.clearTimeout(timer);
+    projectSaveTimersRef.current.delete(projectId);
+  }, []);
+
+  const persistProjectNow = useCallback(async (projectId: string) => {
+    clearProjectSaveTimer(projectId);
+    const project = latestStoreRef.current.projects.find((item) => item.id === projectId);
+    if (!project) return;
+    try {
+      await localStorageProjectStore.saveProject(project);
+      setSaveError("");
+    } catch (reason) {
+      console.error("Unable to save project changes", reason);
+      setSaveError("Changes are not saved. Check project file permission.");
+      throw reason;
+    }
+  }, [clearProjectSaveTimer]);
+
+  const flushPendingProjectSave = useCallback(async (projectId: string) => {
+    if (!projectSaveTimersRef.current.has(projectId)) return true;
+    try {
+      await persistProjectNow(projectId);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [persistProjectNow]);
+
+  const scheduleProjectSave = useCallback((projectId: string) => {
+    clearProjectSaveTimer(projectId);
+    const timer = window.setTimeout(() => {
+      projectSaveTimersRef.current.delete(projectId);
+      void persistProjectNow(projectId);
+    }, 600);
+    projectSaveTimersRef.current.set(projectId, timer);
+  }, [clearProjectSaveTimer, persistProjectNow]);
 
   const refreshStore = useCallback(async () => {
     const snapshot = await localStorageProjectStore.getSnapshot();
+    latestStoreRef.current = snapshot;
     setStore(snapshot);
     setSelectedProjectId((current) => {
       if (snapshot.projects.some((project) => project.id === current)) return current;
@@ -87,6 +140,13 @@ function App() {
   useEffect(() => {
     void refreshStore();
   }, [refreshStore]);
+
+  useEffect(() => {
+    return () => {
+      for (const timer of projectSaveTimersRef.current.values()) window.clearTimeout(timer);
+      projectSaveTimersRef.current.clear();
+    };
+  }, []);
 
   useEffect(() => {
     localStorage.setItem(PREVIEW_TYPE_STORAGE_KEY, markdownMode);
@@ -149,12 +209,14 @@ function App() {
 
   const addEventCode = async () => {
     if (!selectedProject) return;
+    if (!await flushPendingProjectSave(selectedProject.id)) return;
     await localStorageProjectStore.createEventCode(selectedProject.id, { id: uid(), code: "", name: "", description: "" });
     await refreshStore();
   };
 
   const addErrorCode = async (domain = "general") => {
     if (!selectedProject) return;
+    if (!await flushPendingProjectSave(selectedProject.id)) return;
     await localStorageProjectStore.createErrorCode(selectedProject.id, { id: uid(), domain, status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" });
     await refreshStore();
   };
@@ -169,6 +231,7 @@ function App() {
     if (!projectId) return;
     const name = window.prompt("Service name");
     if (!name?.trim()) return;
+    if (!await flushPendingProjectSave(projectId)) return;
     const timestamp = now();
     const service: Service = { id: uid(), name: name.trim(), spec: createDefaultSpec(name.trim()), updatedAt: timestamp };
     await localStorageProjectStore.createService(projectId, service);
@@ -179,6 +242,7 @@ function App() {
   const renameProject = async (project: Project) => {
     const name = window.prompt("Project name", project.name);
     if (!name?.trim()) return;
+    if (!await flushPendingProjectSave(project.id)) return;
     await localStorageProjectStore.renameProject(project.id, name.trim());
     await refreshStore();
   };
@@ -186,6 +250,7 @@ function App() {
   const archiveProject = async (project: Project) => {
     const confirmed = window.confirm(`Delete project "${project.name}"? It will be archived in local storage.`);
     if (!confirmed) return;
+    if (!await flushPendingProjectSave(project.id)) return;
     await localStorageProjectStore.archiveProject(project.id);
     const snapshot = await localStorageProjectStore.getSnapshot();
     const nextProject = snapshot.projects[0];
@@ -199,6 +264,7 @@ function App() {
     if (!selectedProject || !selectedService) return;
     const name = window.prompt("Service name", selectedService.name);
     if (!name?.trim()) return;
+    if (!await flushPendingProjectSave(selectedProject.id)) return;
     await localStorageProjectStore.renameService(selectedProject.id, selectedService.id, name.trim());
     await refreshStore();
   };
@@ -207,6 +273,7 @@ function App() {
     if (!selectedProject || !selectedService) return;
     const confirmed = window.confirm(`Delete service "${selectedService.name}"? It will be archived in local storage.`);
     if (!confirmed) return;
+    if (!await flushPendingProjectSave(selectedProject.id)) return;
     await localStorageProjectStore.archiveService(selectedProject.id, selectedService.id);
     const snapshot = await localStorageProjectStore.getSnapshot();
     const refreshedProject = snapshot.projects.find((project) => project.id === selectedProject.id) ?? snapshot.projects[0];
@@ -216,11 +283,12 @@ function App() {
     setPage("services");
   };
 
-  const updateServiceSpec = async (updater: (spec: ServiceSpec) => ServiceSpec) => {
+  const updateServiceSpec = (updater: (spec: ServiceSpec) => ServiceSpec) => {
     if (!selectedProject || !selectedService) return;
-    const spec = updater(selectedService.spec);
-    await localStorageProjectStore.updateServiceSpec(selectedProject.id, selectedService.id, spec);
-    await refreshStore();
+    const projectId = selectedProject.id;
+    const serviceId = selectedService.id;
+    applyStoreChange((current) => updateServiceSpecInStore(current, projectId, serviceId, updater));
+    scheduleProjectSave(projectId);
   };
   const resizeSplitPanels = (clientX: number) => {
     const rect = serviceLayoutRef.current?.getBoundingClientRect();
@@ -237,7 +305,7 @@ function App() {
   };
   const exportHtml = () => {
     if (!markdown.trim()) return;
-    const html = htmlExportRef.current?.innerHTML ?? "";
+    const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(markdown);
     downloadFile(`${exportBaseName}.html`, buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html), "text/html;charset=utf-8");
   };
   const exportSelectedPreview = () => {
@@ -387,6 +455,8 @@ function App() {
               ) : null}
             </header>
 
+            {saveError ? <p className="save-error" role="status">{saveError}</p> : null}
+
             {page === "services" && (
               <div ref={serviceLayoutRef} className={serviceLayoutClass(viewMode)} style={splitLayoutStyle}>
                 {viewMode !== "preview" && (
@@ -447,15 +517,14 @@ function App() {
                     {markdownMode === "markdown" ? (
                       <MarkdownPreview markdown={markdown} />
                     ) : markdownMode === "html" ? (
-                      <HtmlPreview markdown={markdown} />
+                      <div ref={htmlExportRef}>
+                        <HtmlPreview markdown={markdown} />
+                      </div>
                     ) : markdownMode === "openapi" ? (
                       <OpenApiPreview document={openApiDocument} />
                     ) : (
                       <MarkdownPreview markdown={markdown} />
                     )}
-                    <div className="export-render" aria-hidden="true" ref={htmlExportRef}>
-                      <HtmlPreview markdown={markdown} />
-                    </div>
                   </section>
                 )}
               </div>
@@ -465,9 +534,9 @@ function App() {
               <EventCodesPage
                 rows={selectedProject.event_code}
                 onAdd={addEventCode}
-                onChange={async (eventCodes) => {
-                  await localStorageProjectStore.replaceEventCodes(selectedProject.id, eventCodes);
-                  await refreshStore();
+                onChange={(eventCodes) => {
+                  applyStoreChange((current) => replaceEventCodesInStore(current, selectedProject.id, eventCodes));
+                  scheduleProjectSave(selectedProject.id);
                 }}
               />
             )}
@@ -477,9 +546,9 @@ function App() {
                 rows={selectedProject.error_code}
                 onAddDomain={addErrorDomain}
                 onAddErrorCode={addErrorCode}
-                onChange={async (errorCodes) => {
-                  await localStorageProjectStore.replaceErrorCodes(selectedProject.id, errorCodes);
-                  await refreshStore();
+                onChange={(errorCodes) => {
+                  applyStoreChange((current) => replaceErrorCodesInStore(current, selectedProject.id, errorCodes));
+                  scheduleProjectSave(selectedProject.id);
                 }}
               />
             )}
@@ -494,6 +563,55 @@ function mergeOpenIds(current: Set<string>, ids: string[]) {
   const next = new Set(current);
   for (const id of ids) next.add(id);
   return next;
+}
+
+function updateServiceSpecInStore(
+  store: StoreDocument,
+  projectId: string,
+  serviceId: string,
+  updater: (spec: ServiceSpec) => ServiceSpec,
+): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => {
+      if (project.id !== projectId) return project;
+      return {
+        ...project,
+        updatedAt: timestamp,
+        services: project.services.map((service) => {
+          if (service.id !== serviceId) return service;
+          const spec = updater(service.spec);
+          return {
+            ...service,
+            name: spec.name || service.name,
+            spec,
+            updatedAt: timestamp,
+          };
+        }),
+      };
+    }),
+  };
+}
+
+function replaceEventCodesInStore(store: StoreDocument, projectId: string, eventCodes: EventCode[]): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => (
+      project.id === projectId ? { ...project, event_code: eventCodes, updatedAt: timestamp } : project
+    )),
+  };
+}
+
+function replaceErrorCodesInStore(store: StoreDocument, projectId: string, errorCodes: ErrorCode[]): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => (
+      project.id === projectId ? { ...project, error_code: errorCodes, updatedAt: timestamp } : project
+    )),
+  };
 }
 
 function workspacePathLabel(page: Page, project: Project, service: Service | undefined) {

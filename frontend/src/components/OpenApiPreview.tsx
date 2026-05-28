@@ -1,3 +1,5 @@
+import { useMemo } from "react";
+
 export function OpenApiPreview({ document }: { document: Record<string, any> | null }) {
   if (!document) return <div className="openapi-preview empty-preview">Select a service to preview the OpenAPI spec.</div>;
   const paths = document.paths ?? {};
@@ -106,8 +108,7 @@ function OpenApiResponses({ responses }: { responses: Record<string, any> }) {
 }
 
 function SchemaTree({ schema }: { schema: any }) {
-  if (!schema) return null;
-  const rows = schemaRows(schema);
+  const rows = useMemo(() => schema ? schemaRows(schema) : [], [schema]);
   if (rows.length === 0) return null;
 
   return (

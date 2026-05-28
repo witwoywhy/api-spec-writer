@@ -1,8 +1,23 @@
 import { useEffect, useId, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 
 let mermaidInitialized = false;
+
+const MARKDOWN_REMARK_PLUGINS = [remarkGfm];
+const MARKDOWN_COMPONENTS: Components = {
+  code({ className, children }) {
+    const code = String(children).replace(/\n$/, "");
+    if (className === "language-mermaid") return <MermaidDiagram chart={code} />;
+    return <code className={className}>{children}</code>;
+  },
+  pre({ children }) {
+    return <pre>{children}</pre>;
+  },
+  table({ children }) {
+    return <div className="markdown-table-wrap"><table>{children}</table></div>;
+  },
+};
 
 export function MarkdownPreview({ markdown }: { markdown: string }) {
   if (!markdown.trim()) return <div className="markdown-preview empty-preview">Select a service to preview the spec.</div>;
@@ -25,20 +40,8 @@ export function HtmlPreview({ markdown }: { markdown: string }) {
 function MarkdownBody({ markdown }: { markdown: string }) {
   return (
     <ReactMarkdown
-      remarkPlugins={[remarkGfm]}
-      components={{
-        code({ className, children }) {
-          const code = String(children).replace(/\n$/, "");
-          if (className === "language-mermaid") return <MermaidDiagram chart={code} />;
-          return <code className={className}>{children}</code>;
-        },
-        pre({ children }) {
-          return <pre>{children}</pre>;
-        },
-        table({ children }) {
-          return <div className="markdown-table-wrap"><table>{children}</table></div>;
-        },
-      }}
+      remarkPlugins={MARKDOWN_REMARK_PLUGINS}
+      components={MARKDOWN_COMPONENTS}
     >
       {markdown}
     </ReactMarkdown>
