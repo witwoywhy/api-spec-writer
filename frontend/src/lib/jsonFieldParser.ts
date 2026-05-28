@@ -46,7 +46,7 @@ function createField(field: string, type: string, location: RequestLocation | Re
 
 function primitiveType(value: JsonValue | undefined) {
   if (typeof value === "boolean") return "bool";
-  if (typeof value === "number") return "number";
+  if (typeof value === "number") return Number.isInteger(value) ? "integer" : "float";
   if (typeof value === "string") return "string";
   if (value === null) return "null";
   if (value === undefined) return "unknown";
