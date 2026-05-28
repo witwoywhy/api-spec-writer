@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore } from "./adaptors/projectStore";
@@ -29,8 +29,10 @@ function App() {
   const [page, setPage] = useState<Page>(initialRoute.page);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("markdown");
+  const [editorWidth, setEditorWidth] = useState(58);
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
+  const serviceLayoutRef = useRef<HTMLDivElement>(null);
   const htmlExportRef = useRef<HTMLDivElement>(null);
   const importProjectInputRef = useRef<HTMLInputElement>(null);
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
@@ -195,6 +197,13 @@ function App() {
     await localStorageProjectStore.updateServiceSpec(selectedProject.id, selectedService.id, spec);
     await refreshStore();
   };
+  const resizeSplitPanels = (clientX: number) => {
+    const rect = serviceLayoutRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const nextWidth = ((clientX - rect.left) / rect.width) * 100;
+    setEditorWidth(Math.min(72, Math.max(32, nextWidth)));
+  };
+  const splitLayoutStyle = viewMode === "split" ? ({ "--editor-width": `${editorWidth}%` } as CSSProperties) : undefined;
 
   const exportBaseName = safeFileName(selectedService?.spec.name || selectedService?.name || "api-spec");
   const exportMarkdown = () => {
@@ -369,7 +378,7 @@ function App() {
             </header>
 
             {page === "services" && (
-              <div className={serviceLayoutClass(viewMode)}>
+              <div ref={serviceLayoutRef} className={serviceLayoutClass(viewMode)} style={splitLayoutStyle}>
                 {viewMode !== "preview" && (
                   <section className="panel editor-panel">
                     {selectedService ? (
@@ -387,6 +396,28 @@ function App() {
                     )}
                   </section>
                 )}
+
+                {viewMode === "split" ? (
+                  <div
+                    className="split-divider"
+                    role="separator"
+                    aria-label="Resize editor and preview"
+                    aria-orientation="vertical"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowLeft") setEditorWidth((current) => Math.max(32, current - 4));
+                      if (event.key === "ArrowRight") setEditorWidth((current) => Math.min(72, current + 4));
+                    }}
+                    onPointerDown={(event) => {
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      resizeSplitPanels(event.clientX);
+                    }}
+                    onPointerMove={(event) => {
+                      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                      resizeSplitPanels(event.clientX);
+                    }}
+                  />
+                ) : null}
 
                 {viewMode !== "edit" && (
                   <section className="panel preview-panel">

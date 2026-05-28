@@ -472,8 +472,8 @@ textarea:focus {
 
 .service-editor-layout {
   display: grid;
-  grid-template-columns: minmax(520px, 1.25fr) minmax(420px, 0.9fr);
-  gap: 14px;
+  grid-template-columns: minmax(360px, var(--editor-width, 58%)) 10px minmax(360px, 1fr);
+  gap: 0;
   align-items: start;
 }
 
@@ -483,6 +483,28 @@ textarea:focus {
 
 .service-editor-layout.preview-only {
   grid-template-columns: minmax(0, 1fr);
+}
+
+.split-divider {
+  align-self: stretch;
+  cursor: col-resize;
+  display: flex;
+  justify-content: center;
+  min-height: calc(100vh - 112px);
+  outline: none;
+  touch-action: none;
+}
+
+.split-divider::before {
+  background: var(--line);
+  content: "";
+  width: 1px;
+}
+
+.split-divider:hover::before,
+.split-divider:focus-visible::before {
+  background: var(--accent);
+  width: 2px;
 }
 
 .panel {
