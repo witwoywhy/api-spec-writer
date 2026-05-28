@@ -19,8 +19,10 @@ type MarkdownMode = "markdown" | "html" | "openapi";
 type ViewMode = "split" | "edit" | "preview";
 
 const now = () => new Date().toISOString();
+const PREVIEW_TYPE_STORAGE_KEY = "api-spec-writer-platform:preview-type";
 const initialRoute = parseAppRoute(window.location.pathname);
 const initialViewMode = parseViewMode(new URLSearchParams(window.location.search));
+const initialMarkdownMode = parseMarkdownMode(new URLSearchParams(window.location.search), localStorage.getItem(PREVIEW_TYPE_STORAGE_KEY));
 
 function App() {
   const [store, setStore] = useState<StoreDocument>({ schemaVersion: 1, projects: [] });
@@ -28,7 +30,7 @@ function App() {
   const [selectedServiceId, setSelectedServiceId] = useState(initialRoute.serviceId);
   const [page, setPage] = useState<Page>(initialRoute.page);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
-  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>("markdown");
+  const [markdownMode, setMarkdownMode] = useState<MarkdownMode>(initialMarkdownMode);
   const [editorWidth, setEditorWidth] = useState(58);
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
@@ -72,12 +74,18 @@ function App() {
   }, [refreshStore]);
 
   useEffect(() => {
+    localStorage.setItem(PREVIEW_TYPE_STORAGE_KEY, markdownMode);
+  }, [markdownMode]);
+
+  useEffect(() => {
     const onPopState = () => {
       const route = parseAppRoute(window.location.pathname);
       setSelectedProjectId(route.projectId);
       setSelectedServiceId(route.serviceId);
       setPage(route.page);
-      setViewMode(parseViewMode(new URLSearchParams(window.location.search)));
+      const searchParams = new URLSearchParams(window.location.search);
+      setViewMode(parseViewMode(searchParams));
+      setMarkdownMode(parseMarkdownMode(searchParams, localStorage.getItem(PREVIEW_TYPE_STORAGE_KEY)));
     };
     window.addEventListener("popstate", onPopState);
     return () => window.removeEventListener("popstate", onPopState);
@@ -89,7 +97,7 @@ function App() {
       projectId: selectedProject?.id ?? "",
       serviceId: page === "services" ? (selectedService?.id ?? "") : "",
     });
-    const search = page === "services" && selectedService && viewMode !== "split" ? `?view-mode=${viewMode}` : "";
+    const search = page === "services" && selectedService ? serviceSearchParams(viewMode) : "";
     const url = `${path}${search}`;
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
   }, [page, selectedProject?.id, selectedService, selectedService?.id, viewMode]);
@@ -498,6 +506,19 @@ function parseViewMode(searchParams: URLSearchParams): ViewMode {
   if (value === "edit" || value === "preview") return value;
   if (searchParams.get("preview") === "true") return "preview";
   return "split";
+}
+
+function parseMarkdownMode(searchParams: URLSearchParams, storedValue: string | null): MarkdownMode {
+  const value = searchParams.get("preview-type") ?? storedValue;
+  if (value === "html" || value === "openapi") return value;
+  return "markdown";
+}
+
+function serviceSearchParams(viewMode: ViewMode) {
+  const searchParams = new URLSearchParams();
+  if (viewMode !== "split") searchParams.set("view-mode", viewMode);
+  const value = searchParams.toString();
+  return value ? `?${value}` : "";
 }
 
 function serviceLayoutClass(viewMode: ViewMode) {
