@@ -8,6 +8,8 @@ https://api-spec-writer.witwoywhy.cc/
 
 ## Features
 
+![screen](./assets/screen.png)
+
 - Create and manage projects.
 - Add and edit event codes.
 - Add and edit error codes grouped by domain.
