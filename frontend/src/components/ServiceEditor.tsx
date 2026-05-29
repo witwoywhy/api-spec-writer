@@ -5,8 +5,9 @@ import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
 import { Fieldset, IconButton, Label } from "./ui";
 
-const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
+const REQUEST_LOCATIONS: RequestLocation[] = ["BODY", "HEADER", "PATH PARAM", "QUERY PARAM", "FORM-DATA", "X-WWW-FORM-URLENCODED"];
 const RESPONSE_LOCATIONS: ResponseLocation[] = ["HEADER", "BODY"];
+const REQUEST_BODY_LOCATIONS: RequestLocation[] = ["BODY", "FORM-DATA", "X-WWW-FORM-URLENCODED"];
 const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const SERVICE_TYPES: ServiceType[] = ["http", "publisher", "subscriber", "scheduler"];
 const REQUIRED: RequireFlag[] = ["YES", "NO"];
@@ -69,6 +70,7 @@ export function ServiceEditor({
           rows={spec.requestFields}
           locations={REQUEST_LOCATIONS}
           addLabel="Add Request Field"
+          singleLocationSelector
           exampleLocation="BODY"
           exampleLabel="Request Examples"
           examples={spec.requestExamples}
@@ -179,6 +181,7 @@ function FieldRows({
   onExamplesChange,
   onParseExamples,
   onParseExample,
+  singleLocationSelector = false,
 }: {
   rows: FieldRow[];
   locations: (RequestLocation | ResponseLocation)[];
@@ -195,15 +198,52 @@ function FieldRows({
   onExamplesChange?: (examples: ExampleCase[]) => void;
   onParseExamples?: (examples: ExampleCase[], rows: FieldRow[]) => void;
   onParseExample?: (rows: FieldRow[]) => void;
+  singleLocationSelector?: boolean;
 }) {
+  const [selectedLocation, setSelectedLocation] = useState<RequestLocation | ResponseLocation>(locations[0]);
+  const visibleLocations = singleLocationSelector ? [selectedLocation] : locations;
+  const lockedBodyLocation = singleLocationSelector
+    ? REQUEST_BODY_LOCATIONS.find((location) => rows.some((row) => row.location === location))
+    : undefined;
+
+  useEffect(() => {
+    if (locations.includes(selectedLocation)) return;
+    setSelectedLocation(locations[0]);
+  }, [locations, selectedLocation]);
+
+  useEffect(() => {
+    if (!lockedBodyLocation || !REQUEST_BODY_LOCATIONS.includes(selectedLocation as RequestLocation)) return;
+    if (selectedLocation === lockedBodyLocation) return;
+    setSelectedLocation(lockedBodyLocation);
+  }, [lockedBodyLocation, selectedLocation]);
+
   return (
     <div className="field-groups">
-      {locations.map((location) => {
+      {visibleLocations.map((location) => {
         const locationRows = rows.filter((row) => row.location === location);
         return (
           <div className="subgroup" key={location}>
             <div className="subgroup-title">
-              <h4>{location}</h4>
+              {singleLocationSelector ? (
+                <select
+                  className="location-select"
+                  value={location}
+                  onChange={(event) => setSelectedLocation(event.target.value as RequestLocation | ResponseLocation)}
+                  aria-label="Request field type"
+                >
+                  {locations.map((option) => (
+                    <option
+                      key={option}
+                      value={option}
+                      disabled={Boolean(lockedBodyLocation && REQUEST_BODY_LOCATIONS.includes(option as RequestLocation) && option !== lockedBodyLocation)}
+                    >
+                      {option}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <h4>{location}</h4>
+              )}
               <button type="button" onClick={() => onAdd(location)}><Plus size={16} /> {addLabel}</button>
             </div>
             {locationRows.length > 0 && (

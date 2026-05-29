@@ -1,6 +1,6 @@
 import type { ErrorCode, FieldRow, RequestLocation, ResponseLocation, ServiceSpec } from "../domain";
 
-const REQUEST_LOCATIONS: RequestLocation[] = ["HEADER", "PATH PARAM", "QUERY PARAM", "BODY"];
+const REQUEST_LOCATIONS: RequestLocation[] = ["BODY", "HEADER", "PATH PARAM", "QUERY PARAM", "FORM-DATA", "X-WWW-FORM-URLENCODED"];
 const RESPONSE_LOCATIONS: ResponseLocation[] = ["HEADER", "BODY"];
 
 function escapePipe(value: unknown) {

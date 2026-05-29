@@ -50,10 +50,11 @@ export function serviceOpenApi(spec: ServiceSpec, projectErrorCodes: ErrorCode[]
   };
 
   if (requestBodyFields.length > 0 || requestExamples.length > 0) {
+    const contentType = requestContentType(spec.requestFields);
     operation.requestBody = {
       required: requestBodyFields.some((row) => row.require === "YES"),
       content: {
-        "application/json": {
+        [contentType]: {
           schema: schemaFromFields(requestBodyFields),
           "x-fields": requestBodyFields,
           examples: examplesObject(requestExamples),
@@ -80,6 +81,12 @@ export function serviceOpenApi(spec: ServiceSpec, projectErrorCodes: ErrorCode[]
   };
 }
 
+function requestContentType(fields: FieldRow[]) {
+  if (fields.some((row) => row.location === "FORM-DATA")) return "multipart/form-data";
+  if (fields.some((row) => row.location === "X-WWW-FORM-URLENCODED")) return "application/x-www-form-urlencoded";
+  return "application/json";
+}
+
 function parameters(fields: FieldRow[]): OpenApiParameter[] {
   return fields.flatMap((row) => {
     const location = parameterLocation(row.location);
@@ -95,7 +102,7 @@ function parameters(fields: FieldRow[]): OpenApiParameter[] {
 }
 
 function bodyFieldsOrExample(fields: FieldRow[], examples: ExampleCase[]) {
-  const bodyFields = fields.filter((row) => row.location === "BODY");
+  const bodyFields = fields.filter((row) => row.location === "BODY" || row.location === "FORM-DATA" || row.location === "X-WWW-FORM-URLENCODED");
   if (bodyFields.length > 0) return bodyFields;
 
   for (const example of examples) {

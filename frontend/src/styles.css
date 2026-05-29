@@ -922,6 +922,10 @@ label span {
   font-size: 13px;
 }
 
+.location-select {
+  max-width: 220px;
+}
+
 .example-section {
   border-top: 1px solid var(--line);
   display: grid;
