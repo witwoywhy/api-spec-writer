@@ -1,5 +1,5 @@
-import { Edit3, Plus, Trash2 } from "lucide-react";
-import { type TextareaHTMLAttributes, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ChevronDown, Edit3, Plus, Trash2 } from "lucide-react";
+import { type TextareaHTMLAttributes, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
@@ -450,12 +450,12 @@ function ServiceErrorRow({
   return (
     <div className="row error-row">
       <input value={resolved.status} placeholder="HTTP" readOnly />
-      <select value={selectedErrorCode?.id ?? ""} onChange={(event) => onSelect(event.target.value)}>
-        <option value="" disabled>{resolved.code || "Select error"}</option>
-        {projectErrorCodes.map((errorCode) => (
-          <option key={errorCode.id} value={errorCode.id}>{errorCode.code}</option>
-        ))}
-      </select>
+      <ErrorCodeSearchableSelect
+        value={selectedErrorCode?.id ?? ""}
+        options={projectErrorCodes}
+        placeholder={resolved.code || "Select error"}
+        onChange={onSelect}
+      />
       <input value={resolved.message_en} placeholder="message" readOnly />
       <input value={resolved.description_en} placeholder="when this happens" readOnly />
       <input value={resolved.message_th} placeholder="ข้อความภาษาไทย" readOnly />
@@ -463,6 +463,90 @@ function ServiceErrorRow({
       <IconButton label="Remove error" onClick={onRemove} />
     </div>
   );
+}
+
+function ErrorCodeSearchableSelect({
+  value,
+  options,
+  placeholder,
+  onChange,
+}: {
+  value: string;
+  options: ErrorCode[];
+  placeholder: string;
+  onChange: (value: string) => void;
+}) {
+  const selected = options.find((option) => option.id === value);
+  const selectedLabel = selected?.code ?? "";
+  const [inputValue, setInputValue] = useState(selectedLabel);
+  const [open, setOpen] = useState(false);
+  const filteredOptions = useMemo(() => {
+    const query = inputValue.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((option) => errorCodeSearchText(option).includes(query));
+  }, [inputValue, options]);
+
+  useEffect(() => {
+    if (open) return;
+    setInputValue(selectedLabel);
+  }, [open, selectedLabel]);
+
+  return (
+    <div className="searchable-select error-code-select">
+      <input
+        value={inputValue}
+        placeholder={placeholder}
+        onFocus={() => {
+          setInputValue(selectedLabel);
+          setOpen(true);
+        }}
+        onChange={(event) => {
+          setInputValue(event.target.value);
+          setOpen(true);
+        }}
+        onBlur={() => {
+          setOpen(false);
+          setInputValue(selectedLabel);
+        }}
+      />
+      <button type="button" aria-label="Open error code options" onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen((current) => !current)}>
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="searchable-options">
+          {filteredOptions.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              className={option.id === value ? "active" : ""}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setInputValue(option.code);
+                onChange(option.id);
+                setOpen(false);
+              }}
+            >
+              <strong>{option.code}</strong>
+              <small>{option.status}{option.message_en ? ` ${option.message_en}` : ""}</small>
+            </button>
+          ))}
+          {filteredOptions.length === 0 && <span>No options</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function errorCodeSearchText(errorCode: ErrorCode) {
+  return [
+    errorCode.status,
+    errorCode.code,
+    errorCode.domain,
+    errorCode.message_en,
+    errorCode.description_en,
+    errorCode.message_th,
+    errorCode.description_th,
+  ].join(" ").toLowerCase();
 }
 
 function SmartTextarea({

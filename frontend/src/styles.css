@@ -1329,6 +1329,27 @@ label span {
   background: #eef3f8;
 }
 
+.error-code-select .searchable-options {
+  min-width: min(420px, calc(100vw - 48px));
+  width: max-content;
+}
+
+.error-code-select .searchable-options button {
+  max-width: min(420px, calc(100vw - 48px));
+  white-space: normal;
+}
+
+.searchable-options button strong,
+.searchable-options button small {
+  display: block;
+}
+
+.searchable-options button small {
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.3;
+}
+
 .searchable-options span {
   color: var(--muted);
 }
