@@ -5,30 +5,30 @@ import { uid } from "../lib/id";
 import { IconButton } from "./ui";
 
 const PG_TYPES = [
-  "uuid",
-  "text",
-  "varchar",
-  "char",
-  "boolean",
-  "smallint",
-  "integer",
-  "bigint",
-  "serial",
-  "bigserial",
-  "numeric",
-  "decimal",
-  "real",
-  "double precision",
-  "date",
-  "time",
-  "timestamp",
-  "timestamptz",
-  "json",
-  "jsonb",
-  "bytea",
-  "inet",
-  "cidr",
-  "money",
+  "UUID",
+  "TEXT",
+  "VARCHAR",
+  "CHAR",
+  "BOOLEAN",
+  "SMALLINT",
+  "INTEGER",
+  "BIGINT",
+  "SERIAL",
+  "BIGSERIAL",
+  "NUMERIC",
+  "DECIMAL",
+  "REAL",
+  "DOUBLE PRECISION",
+  "DATE",
+  "TIME",
+  "TIMESTAMP",
+  "TIMESTAMPTZ",
+  "JSON",
+  "JSONB",
+  "BYTEA",
+  "INET",
+  "CIDR",
+  "MONEY",
 ];
 const NULLABLE_OPTIONS: DbColumnNullable[] = ["YES", "NO"];
 const CONSTRAINT_OPTIONS: DbColumnConstraint[] = ["NONE", "PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CHECK", "DEFAULT", "INDEX"];
@@ -43,7 +43,7 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
   const addColumn = (tableId: string) => {
     onChange(tables.map((table) => table.id === tableId ? {
       ...table,
-      columns: [...table.columns, { id: uid(), field: "", type: "uuid", nullable: "NO", constraint: "NONE", description: "" }],
+      columns: [...table.columns, { id: uid(), field: "", type: "UUID", nullable: "NO", constraint: "NONE", description: "" }],
     } : table));
   };
   const updateColumn = (tableId: string, columnId: string, patch: Partial<DbColumn>) => {
@@ -140,10 +140,10 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
                 </span>
                 <input value={column.field} placeholder="id" onChange={(event) => updateColumn(selectedTable.id, column.id, { field: event.target.value })} />
                 <SearchableSelect
-                  value={column.type}
+                  value={column.type.toUpperCase()}
                   options={PG_TYPES}
                   placeholder="Search PG type"
-                  onChange={(type) => updateColumn(selectedTable.id, column.id, { type })}
+                  onChange={(type) => updateColumn(selectedTable.id, column.id, { type: type.toUpperCase() })}
                 />
                 <select value={column.nullable} onChange={(event) => updateColumn(selectedTable.id, column.id, { nullable: event.target.value as DbColumnNullable })}>
                   {NULLABLE_OPTIONS.map((option) => <option key={option} value={option}>{option}</option>)}

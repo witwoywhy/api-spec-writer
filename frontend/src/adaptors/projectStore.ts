@@ -652,7 +652,7 @@ function normalizeDbSchema(value: unknown): DbTable[] {
       columns: Array.isArray(dbTable.columns) ? dbTable.columns.map((column) => ({
         id: column.id ?? crypto.randomUUID(),
         field: column.field ?? "",
-        type: column.type ?? "uuid",
+        type: normalizeDbColumnType(column.type),
         nullable: column.nullable === "YES" ? "YES" : "NO",
         constraint: normalizeDbConstraint(column.constraint),
         description: column.description ?? "",
@@ -677,6 +677,10 @@ function normalizeDbIndexColumnIds(index: unknown) {
 function normalizeDbIndexType(value: unknown) {
   if (value === "HASH" || value === "GIN" || value === "GIST" || value === "BRIN") return value;
   return "BTREE";
+}
+
+function normalizeDbColumnType(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim().toUpperCase() : "UUID";
 }
 
 function normalizeDbConstraint(value: unknown) {

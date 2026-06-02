@@ -1141,7 +1141,7 @@ function dbSchemaSqlPreview(tables: DbTable[]) {
       continue;
     }
 
-    const columnDefinitions = table.columns.map((column) => `  ${dbColumnSql(column)}`);
+    const columnDefinitions = dbColumnSqlRows(table.columns);
     statements.push(`CREATE TABLE ${tableName} (\n${columnDefinitions.join(",\n")}\n);`);
 
     for (const column of table.columns) {
@@ -1180,10 +1180,18 @@ function createIndexSql(table: DbTable, tableName: string, index: Pick<DbTable["
   return `CREATE ${index.unique === "YES" ? "UNIQUE " : ""}INDEX ${quoteSqlIdentifier(indexName)} ON ${tableName} USING ${index.type.toLowerCase()} (${columnSql});`;
 }
 
-function dbColumnSql(column: DbTable["columns"][number]) {
+function dbColumnSqlRows(columns: DbTable["columns"]) {
+  const names = columns.map((column) => quoteSqlIdentifier(column.field || "unnamed_column"));
+  const types = columns.map((column) => column.type.trim() || "TEXT");
+  const nameWidth = Math.max(...names.map((name) => name.length));
+  const typeWidth = Math.max(...types.map((type) => type.length));
+  return columns.map((column, index) => `  ${dbColumnSql(column, names[index], types[index], nameWidth, typeWidth)}`);
+}
+
+function dbColumnSql(column: DbTable["columns"][number], name: string, type: string, nameWidth: number, typeWidth: number) {
   const parts = [
-    quoteSqlIdentifier(column.field || "unnamed_column"),
-    column.type.trim() || "text",
+    name.padEnd(nameWidth),
+    type.padEnd(typeWidth),
   ];
   if (column.nullable === "NO" && column.constraint !== "PRIMARY KEY") parts.push("NOT NULL");
   if (column.constraint === "PRIMARY KEY" || column.constraint === "UNIQUE") parts.push(column.constraint);
