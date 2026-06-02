@@ -725,6 +725,7 @@ function App() {
                       <ServiceEditor
                         spec={selectedService.spec}
                         projectErrorCodes={selectedProject.error_code}
+                        projectDbSchema={selectedProject.db_schema}
                         onChange={updateServiceSpec}
                       />
                     ) : (

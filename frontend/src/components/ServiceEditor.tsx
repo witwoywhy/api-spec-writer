@@ -1,6 +1,6 @@
 import { ChevronDown, Edit3, Plus, Trash2 } from "lucide-react";
 import { type TextareaHTMLAttributes, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
+import type { DbTable, ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
 import { Fieldset, IconButton, Label } from "./ui";
@@ -16,10 +16,12 @@ const HTTP_STATUS_CODES = ["200", "201", "202", "204", "400", "401", "403", "404
 export function ServiceEditor({
   spec,
   projectErrorCodes,
+  projectDbSchema,
   onChange,
 }: {
   spec: ServiceSpec;
   projectErrorCodes: ErrorCode[];
+  projectDbSchema: DbTable[];
   onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void;
 }) {
   const serviceType = spec.type ?? "http";
@@ -160,7 +162,7 @@ export function ServiceEditor({
         />
       </Fieldset>
 
-      <MappingEditor sections={spec.mappingSections} onChange={(mappingSections) => patch({ mappingSections })} />
+      <MappingEditor sections={spec.mappingSections} dbSchema={projectDbSchema} onChange={(mappingSections) => patch({ mappingSections })} />
     </>
   );
 }
@@ -607,14 +609,19 @@ function SmartTextarea({
   );
 }
 
-function MappingEditor({ sections, onChange }: { sections: MappingSection[]; onChange: (sections: MappingSection[]) => void }) {
+function MappingEditor({ sections, dbSchema, onChange }: { sections: MappingSection[]; dbSchema: DbTable[]; onChange: (sections: MappingSection[]) => void }) {
+  const tableNames = useMemo(() => dbSchema.map((table) => table.name.trim()).filter(Boolean), [dbSchema]);
   return (
     <Fieldset title="Field to Field Mapping">
       <button type="button" onClick={() => onChange([...sections, { id: uid(), name: "", rows: [] }])}><Plus size={16} /> Add Mapping Section</button>
       {sections.map((section) => (
         <div className="subgroup" key={section.id}>
           <div className="subgroup-title">
-            <input value={section.name} placeholder="Mapping section name" onChange={(event) => onChange(sections.map((item) => item.id === section.id ? { ...item, name: event.target.value } : item))} />
+            <MappingSectionNameSelect
+              value={section.name}
+              options={tableNames}
+              onChange={(name) => onChange(sections.map((item) => item.id === section.id ? { ...item, name } : item))}
+            />
             <IconButton label="Remove mapping section" onClick={() => onChange(sections.filter((item) => item.id !== section.id))} />
           </div>
           {section.rows.length > 0 && (
@@ -637,5 +644,65 @@ function MappingEditor({ sections, onChange }: { sections: MappingSection[]; onC
         </div>
       ))}
     </Fieldset>
+  );
+}
+
+function MappingSectionNameSelect({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
+  const [inputValue, setInputValue] = useState(value);
+  const [open, setOpen] = useState(false);
+  const filteredOptions = useMemo(() => {
+    const query = inputValue.trim().toLowerCase();
+    if (!query) return options;
+    return options.filter((option) => option.toLowerCase().includes(query));
+  }, [inputValue, options]);
+
+  useEffect(() => {
+    if (open) return;
+    setInputValue(value);
+  }, [open, value]);
+
+  return (
+    <div className="searchable-select">
+      <input
+        value={inputValue}
+        placeholder="Mapping section name"
+        onFocus={() => {
+          setInputValue(value);
+          setOpen(true);
+        }}
+        onChange={(event) => {
+          setInputValue(event.target.value);
+          setOpen(true);
+          onChange(event.target.value);
+        }}
+        onBlur={() => {
+          setOpen(false);
+          onChange(inputValue);
+        }}
+      />
+      <button type="button" aria-label="Open DB schema table options" onMouseDown={(event) => event.preventDefault()} onClick={() => setOpen((current) => !current)}>
+        <ChevronDown size={14} />
+      </button>
+      {open && (
+        <div className="searchable-options">
+          {filteredOptions.map((option) => (
+            <button
+              key={option}
+              type="button"
+              className={option === value ? "active" : ""}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setInputValue(option);
+                onChange(option);
+                setOpen(false);
+              }}
+            >
+              {option}
+            </button>
+          ))}
+          {filteredOptions.length === 0 && <span>No tables</span>}
+        </div>
+      )}
+    </div>
   );
 }
