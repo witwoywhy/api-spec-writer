@@ -33,6 +33,14 @@ const PG_TYPES = [
 const NULLABLE_OPTIONS: DbColumnNullable[] = ["YES", "NO"];
 const CONSTRAINT_OPTIONS: DbColumnConstraint[] = ["NONE", "PRIMARY KEY", "UNIQUE", "FOREIGN KEY", "CHECK", "DEFAULT", "INDEX"];
 const INDEX_TYPES: DbIndex["type"][] = ["BTREE", "HASH", "GIN", "GIST", "BRIN"];
+const AUDIT_COLUMNS: Array<Omit<DbColumn, "id">> = [
+  { field: "created_by", type: "VARCHAR(100)", nullable: "NO", constraint: "NONE", description: "" },
+  { field: "created_by_id", type: "VARCHAR(36)", nullable: "NO", constraint: "NONE", description: "" },
+  { field: "created_at", type: "TIMESTAMP", nullable: "NO", constraint: "NONE", description: "" },
+  { field: "updated_by", type: "VARCHAR(100)", nullable: "NO", constraint: "NONE", description: "" },
+  { field: "updated_by_id", type: "VARCHAR(36)", nullable: "NO", constraint: "NONE", description: "" },
+  { field: "updated_at", type: "TIMESTAMP", nullable: "NO", constraint: "NONE", description: "" },
+];
 
 export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: DbTable[]; selectedTableId: string; onChange: (tables: DbTable[]) => void }) {
   const [draggedColumnId, setDraggedColumnId] = useState("");
@@ -45,6 +53,17 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
       ...table,
       columns: [...table.columns, { id: uid(), field: "", type: "UUID", nullable: "NO", constraint: "NONE", description: "" }],
     } : table));
+  };
+  const addAuditColumns = (tableId: string) => {
+    onChange(tables.map((table) => {
+      if (table.id !== tableId) return table;
+      const existingFields = new Set(table.columns.map((column) => column.field.trim().toLowerCase()));
+      const auditColumns = AUDIT_COLUMNS
+        .filter((column) => !existingFields.has(column.field.toLowerCase()))
+        .map((column) => ({ ...column, id: uid() }));
+      if (auditColumns.length === 0) return table;
+      return { ...table, columns: [...table.columns, ...auditColumns] };
+    }));
   };
   const updateColumn = (tableId: string, columnId: string, patch: Partial<DbColumn>) => {
     onChange(tables.map((table) => table.id === tableId ? {
@@ -161,7 +180,10 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
                 <IconButton label="Remove column" onClick={() => updateTable(selectedTable.id, { columns: selectedTable.columns.filter((item) => item.id !== column.id) })} />
               </div>
             ))}
-            <button type="button" onClick={() => addColumn(selectedTable.id)}><Plus size={16} /> Add Column</button>
+            <div className="inline-actions">
+              <button type="button" onClick={() => addColumn(selectedTable.id)}><Plus size={16} /> Add Column</button>
+              <button type="button" onClick={() => addAuditColumns(selectedTable.id)}><Plus size={16} /> Add Audit Columns</button>
+            </div>
             <div className="schema-index-section">
               <div className="subgroup-title">
                 <h4>Indexes</h4>

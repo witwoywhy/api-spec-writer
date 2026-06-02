@@ -1178,6 +1178,14 @@ label span {
   grid-template-columns: minmax(0, 1fr) 36px;
 }
 
+.inline-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .schema-index-section {
   border-top: 1px solid var(--line);
   display: grid;
