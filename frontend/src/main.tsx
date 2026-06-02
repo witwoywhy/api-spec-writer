@@ -1,6 +1,6 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
+import { Braces, Columns2, Download, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore, registerProjectFileHandle, type ProjectFileHandle } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { DbSchemaPage } from "./components/DbSchemaPage";
@@ -8,7 +8,7 @@ import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
 import { OpenApiPreview } from "./components/OpenApiPreview";
 import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
-import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceSpec, StoreDocument } from "./domain";
+import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceFolder, ServiceSpec, StoreDocument } from "./domain";
 import { buildAppPath, parseAppRoute } from "./lib/appRouter";
 import { serviceGoStruct } from "./lib/goStructPreview";
 import { uid } from "./lib/id";
@@ -39,6 +39,7 @@ type ProjectFilePicker = {
 const now = () => new Date().toISOString();
 const PREVIEW_TYPE_STORAGE_KEY = "api-spec-writer-platform:preview-type";
 const PROJECT_DRAFT_STORAGE_PREFIX = "api-spec-writer-platform:project-draft:v1:";
+const GENERAL_SERVICE_FOLDER_ID = "__general_services__";
 const initialRoute = parseAppRoute(window.location.pathname);
 const initialViewMode = parseViewMode(new URLSearchParams(window.location.search));
 const initialMarkdownMode = parseMarkdownMode(new URLSearchParams(window.location.search), localStorage.getItem(PREVIEW_TYPE_STORAGE_KEY));
@@ -55,6 +56,7 @@ function App() {
   const [saveError, setSaveError] = useState("");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
+  const [openServiceFolders, setOpenServiceFolders] = useState<Set<string>>(() => new Set());
   const [openDbSchemas, setOpenDbSchemas] = useState<Set<string>>(() => new Set());
   const serviceLayoutRef = useRef<HTMLDivElement>(null);
   const htmlExportRef = useRef<HTMLDivElement>(null);
@@ -64,6 +66,7 @@ function App() {
   const projectSaveChainsRef = useRef<Map<string, Promise<void>>>(new Map());
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
+  const selectedServiceFolder = selectedProject && selectedService ? serviceFolderForService(selectedProject, selectedService) : undefined;
   const selectedDbTable = selectedProject?.db_schema.find((table) => table.id === selectedDbTableId) ?? selectedProject?.db_schema[0];
   const shouldRenderServicePreview = page === "services" && viewMode !== "edit" && Boolean(selectedService);
   const shouldRenderDbSchemaPreview = page === "dbSchema" && viewMode !== "edit";
@@ -194,6 +197,7 @@ function App() {
     });
     setOpenProjects((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
     setOpenServices((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
+    setOpenServiceFolders((current) => mergeOpenIds(current, snapshot.projects.flatMap((project) => serviceFolderKeys(project))));
     setOpenDbSchemas((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
   }, []);
 
@@ -269,6 +273,10 @@ function App() {
     setOpenServices((current) => toggleSetValue(current, projectId));
   };
 
+  const toggleServiceFolder = (folderKey: string) => {
+    setOpenServiceFolders((current) => toggleSetValue(current, folderKey));
+  };
+
   const toggleDbSchema = (projectId: string) => {
     setOpenDbSchemas((current) => toggleSetValue(current, projectId));
   };
@@ -278,13 +286,15 @@ function App() {
     const name = window.prompt("Project name");
     if (!name?.trim()) return;
     const timestamp = now();
-    const service: Service = { id: uid(), name: "Create Transaction", spec: createDefaultSpec(), updatedAt: timestamp };
+    const serviceFolder: ServiceFolder = { id: uid(), name: "General", createdAt: timestamp, updatedAt: timestamp };
+    const service: Service = { id: uid(), folderId: serviceFolder.id, name: "Create Transaction", spec: createDefaultSpec(), updatedAt: timestamp };
     const project: Project = {
       id: uid(),
       name: name.trim(),
       event_code: [],
       error_code: createDefaultErrorCodes(),
       db_schema: [],
+      service_folders: [serviceFolder],
       services: [service],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -295,6 +305,7 @@ function App() {
     await refreshStore();
     setSelectedProjectId(project.id);
     setSelectedServiceId(service.id);
+    setOpenServiceFolders((current) => new Set(current).add(serviceFolderKey(project.id, serviceFolder.id)));
     setSelectedDbTableId("");
   };
 
@@ -318,16 +329,75 @@ function App() {
     await addErrorCode(domain.trim());
   };
 
-  const createService = async (projectId = selectedProject?.id) => {
+  const createService = async (projectId = selectedProject?.id, folderId?: string | null) => {
     if (!projectId) return;
     const name = window.prompt("Service name");
     if (!name?.trim()) return;
     if (!await flushPendingProjectSave(projectId)) return;
     const timestamp = now();
-    const service: Service = { id: uid(), name: name.trim(), spec: createDefaultSpec(name.trim()), updatedAt: timestamp };
+    const project = latestStoreRef.current.projects.find((item) => item.id === projectId);
+    const targetFolderId = folderId === null ? undefined : (folderId ?? project?.service_folders[0]?.id);
+    const service: Service = { id: uid(), folderId: targetFolderId, name: name.trim(), spec: createDefaultSpec(name.trim()), updatedAt: timestamp };
     await localStorageProjectStore.createService(projectId, service);
     await refreshStore();
+    if (targetFolderId) setOpenServiceFolders((current) => new Set(current).add(serviceFolderKey(projectId, targetFolderId)));
     setSelectedServiceId(service.id);
+  };
+
+  const createServiceFolder = (projectId = selectedProject?.id) => {
+    if (!projectId) return;
+    const name = window.prompt("Folder name");
+    if (!name?.trim()) return;
+    const timestamp = now();
+    const folder: ServiceFolder = { id: uid(), name: name.trim(), createdAt: timestamp, updatedAt: timestamp };
+    setOpenServices((current) => new Set(current).add(projectId));
+    setOpenServiceFolders((current) => new Set(current).add(serviceFolderKey(projectId, folder.id)));
+    setSelectedProjectId(projectId);
+    setSelectedServiceId("");
+    setSelectedDbTableId("");
+    setPage("services");
+    applyProjectChange(projectId, (current) => replaceServiceFoldersInStore(current, projectId, [
+      ...((current.projects.find((project) => project.id === projectId)?.service_folders) ?? []),
+      folder,
+    ]));
+  };
+
+  const archiveServiceFolder = (project: Project, folder: ServiceFolder) => {
+    const serviceCount = project.services.filter((service) => service.folderId === folder.id).length;
+    const confirmed = window.confirm(`Delete folder "${folder.name}"? ${serviceCount} service${serviceCount === 1 ? "" : "s"} will move to General.`);
+    if (!confirmed) return;
+    setOpenServiceFolders((current) => {
+      const next = new Set(current);
+      next.delete(serviceFolderKey(project.id, folder.id));
+      if (serviceCount > 0) next.add(serviceFolderKey(project.id, GENERAL_SERVICE_FOLDER_ID));
+      return next;
+    });
+    applyProjectChange(project.id, (current) => removeServiceFolderInStore(current, project.id, folder.id));
+  };
+
+  const moveProject = async (sourceProjectId: string, targetProjectId: string) => {
+    if (sourceProjectId === targetProjectId) return;
+    if (!await flushPendingProjectSaves()) return;
+    const projects = moveById(latestStoreRef.current.projects, sourceProjectId, targetProjectId);
+    const nextStore = { ...latestStoreRef.current, projects };
+    latestStoreRef.current = nextStore;
+    setStore(nextStore);
+    await localStorageProjectStore.reorderProjects(projects.map((project) => project.id));
+  };
+
+  const moveDbTable = (project: Project, sourceTableId: string, targetTableId: string) => {
+    if (sourceTableId === targetTableId) return;
+    applyProjectChange(project.id, (current) => replaceDbSchemaInStore(current, project.id, moveById(project.db_schema, sourceTableId, targetTableId)));
+  };
+
+  const moveServiceFolder = (project: Project, sourceFolderId: string, targetFolderId: string) => {
+    if (sourceFolderId === targetFolderId) return;
+    applyProjectChange(project.id, (current) => replaceServiceFoldersInStore(current, project.id, moveById(project.service_folders, sourceFolderId, targetFolderId)));
+  };
+
+  const moveService = (project: Project, folderId: string, sourceServiceId: string, targetServiceId: string) => {
+    if (sourceServiceId === targetServiceId) return;
+    applyProjectChange(project.id, (current) => moveServiceInStore(current, project.id, folderId, sourceServiceId, targetServiceId));
   };
 
   const createDbTable = (projectId = selectedProject?.id) => {
@@ -374,6 +444,16 @@ function App() {
     if (!await flushPendingProjectSave(selectedProject.id)) return;
     await localStorageProjectStore.renameService(selectedProject.id, selectedService.id, name.trim());
     await refreshStore();
+  };
+
+  const renameSelectedServiceFolder = () => {
+    if (!selectedProject || !selectedServiceFolder || !selectedServiceFolder.id) return;
+    const name = window.prompt("Folder name", selectedServiceFolder.name);
+    if (!name?.trim()) return;
+    const timestamp = now();
+    applyProjectChange(selectedProject.id, (current) => replaceServiceFoldersInStore(current, selectedProject.id, selectedProject.service_folders.map((folder) => (
+      folder.id === selectedServiceFolder.id ? { ...folder, name: name.trim(), updatedAt: timestamp } : folder
+    ))));
   };
 
   const archiveService = async () => {
@@ -520,9 +600,11 @@ function App() {
           page={page}
           openProjects={openProjects}
           openServices={openServices}
+          openServiceFolders={openServiceFolders}
           openDbSchemas={openDbSchemas}
           onToggleProject={toggleProject}
           onToggleServices={toggleServices}
+          onToggleServiceFolder={toggleServiceFolder}
           onToggleDbSchema={toggleDbSchema}
           onSelectProject={(project) => {
             setSelectedProjectId(project.id);
@@ -546,6 +628,7 @@ function App() {
             setPage("dbSchema");
           }}
           onCreateDbTable={(project) => createDbTable(project.id)}
+          onCreateServiceFolder={(project) => createServiceFolder(project.id)}
           onSelectServices={(project) => {
             setSelectedProjectId(project.id);
             setSelectedServiceId(project.services[0]?.id ?? "");
@@ -554,10 +637,11 @@ function App() {
           }}
           onRenameProject={renameProject}
           onArchiveProject={archiveProject}
-          onCreateService={(project) => {
+          onArchiveServiceFolder={archiveServiceFolder}
+          onCreateService={(project, folderId) => {
             setSelectedProjectId(project.id);
             setPage("services");
-            createService(project.id);
+            createService(project.id, folderId);
           }}
           onSelectService={(project, service) => {
             setSelectedProjectId(project.id);
@@ -570,6 +654,12 @@ function App() {
             setSelectedDbTableId(table.id);
             setPage("dbSchema");
           }}
+          onMoveProject={(sourceProjectId, targetProjectId) => {
+            void moveProject(sourceProjectId, targetProjectId);
+          }}
+          onMoveDbTable={moveDbTable}
+          onMoveServiceFolder={moveServiceFolder}
+          onMoveService={moveService}
           showProjectActions={viewMode !== "preview"}
         />
         <div className="sidebar-actions">
@@ -593,14 +683,19 @@ function App() {
           <>
             <header className="workspace-header">
               <div className="workspace-path">
-                <p className="eyebrow">{workspacePathLabel(page, selectedProject, selectedService, selectedDbTable)}</p>
+                <WorkspacePath
+                  dbTable={selectedDbTable}
+                  page={page}
+                  project={selectedProject}
+                  service={selectedService}
+                  serviceFolder={selectedServiceFolder}
+                  onRenameService={renameService}
+                  onRenameServiceFolder={renameSelectedServiceFolder}
+                />
                 {page === "services" && selectedService && viewMode !== "preview" ? (
                   <div className="workspace-actions">
-                    <button type="button" onClick={renameService}>
-                      <Edit3 size={13} /> Edit
-                    </button>
-                    <button className="danger-button" type="button" onClick={archiveService}>
-                      <Trash2 size={13} /> Delete
+                    <button className="danger-button" type="button" title="Delete service" aria-label="Delete service" onClick={archiveService}>
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 ) : null}
@@ -797,6 +892,21 @@ function mergeOpenIds(current: Set<string>, ids: string[]) {
   return next;
 }
 
+function serviceFolderForService(project: Project, service: Service): ServiceFolder | undefined {
+  if (!service.folderId) return { id: "", name: "General", createdAt: "", updatedAt: "" };
+  return project.service_folders.find((folder) => folder.id === service.folderId);
+}
+
+function serviceFolderKeys(project: Project) {
+  const keys = project.service_folders.map((folder) => serviceFolderKey(project.id, folder.id));
+  if (project.services.some((service) => !service.folderId)) keys.push(serviceFolderKey(project.id, GENERAL_SERVICE_FOLDER_ID));
+  return keys;
+}
+
+function serviceFolderKey(projectId: string, folderId: string) {
+  return `${projectId}:${folderId}`;
+}
+
 type ProjectDraft = {
   schemaVersion: 1;
   savedAt: string;
@@ -833,7 +943,11 @@ function readProjectDraft(projectId: string) {
 }
 
 function normalizeProjectDraft(project: Project): Project {
-  return { ...project, db_schema: Array.isArray(project.db_schema) ? project.db_schema : [] };
+  return {
+    ...project,
+    db_schema: Array.isArray(project.db_schema) ? project.db_schema : [],
+    service_folders: Array.isArray(project.service_folders) ? project.service_folders : [],
+  };
 }
 
 function mergeProjectDrafts(store: StoreDocument): StoreDocument {
@@ -902,11 +1016,114 @@ function replaceDbSchemaInStore(store: StoreDocument, projectId: string, dbSchem
   };
 }
 
-function workspacePathLabel(page: Page, project: Project, service: Service | undefined, dbTable: DbTable | undefined) {
+function replaceServiceFoldersInStore(store: StoreDocument, projectId: string, serviceFolders: ServiceFolder[]): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => (
+      project.id === projectId ? { ...project, service_folders: serviceFolders, updatedAt: timestamp } : project
+    )),
+  };
+}
+
+function removeServiceFolderInStore(store: StoreDocument, projectId: string, folderId: string): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => {
+      if (project.id !== projectId) return project;
+      return {
+        ...project,
+        service_folders: project.service_folders.filter((folder) => folder.id !== folderId),
+        services: project.services.map((service) => (
+          service.folderId === folderId ? { ...service, folderId: undefined, updatedAt: timestamp } : service
+        )),
+        updatedAt: timestamp,
+      };
+    }),
+  };
+}
+
+function moveServiceInStore(store: StoreDocument, projectId: string, folderId: string, sourceServiceId: string, targetServiceId: string): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => {
+      if (project.id !== projectId) return project;
+      const sameFolder = (service: Service) => serviceFolderId(service) === folderId;
+      const folderServices = moveById(project.services.filter(sameFolder), sourceServiceId, targetServiceId);
+      const folderServiceIds = new Set(folderServices.map((service) => service.id));
+      let serviceIndex = 0;
+      return {
+        ...project,
+        services: project.services.map((service) => {
+          if (!folderServiceIds.has(service.id)) return service;
+          const nextService = folderServices[serviceIndex];
+          serviceIndex += 1;
+          return nextService;
+        }),
+        updatedAt: timestamp,
+      };
+    }),
+  };
+}
+
+function moveById<T extends { id: string }>(items: T[], sourceId: string, targetId: string): T[] {
+  const sourceIndex = items.findIndex((item) => item.id === sourceId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return items;
+  const nextItems = [...items];
+  const [sourceItem] = nextItems.splice(sourceIndex, 1);
+  nextItems.splice(targetIndex, 0, sourceItem);
+  return nextItems;
+}
+
+function serviceFolderId(service: Service) {
+  return service.folderId ?? GENERAL_SERVICE_FOLDER_ID;
+}
+
+function WorkspacePath({
+  page,
+  project,
+  service,
+  serviceFolder,
+  dbTable,
+  onRenameService,
+  onRenameServiceFolder,
+}: {
+  page: Page;
+  project: Project;
+  service: Service | undefined;
+  serviceFolder: ServiceFolder | undefined;
+  dbTable: DbTable | undefined;
+  onRenameService: () => void;
+  onRenameServiceFolder: () => void;
+}) {
+  if (page !== "services" || !service) {
+    return <p className="eyebrow">{workspacePathLabel(page, project, service, serviceFolder, dbTable)}</p>;
+  }
+  const folderName = serviceFolder?.name ?? "General";
+  return (
+    <div className="workspace-breadcrumb eyebrow" aria-label="Workspace path">
+      <span>PROJECTS</span>
+      <span>/</span>
+      <span>{project.name}</span>
+      <span>/</span>
+      <span>SERVICE</span>
+      <span>/</span>
+      <button type="button" onClick={onRenameServiceFolder} disabled={!serviceFolder?.id}>{folderName}</button>
+      <span>/</span>
+      <button type="button" onClick={onRenameService}>{service.name}</button>
+    </div>
+  );
+}
+
+function workspacePathLabel(page: Page, project: Project, service: Service | undefined, serviceFolder: ServiceFolder | undefined, dbTable: DbTable | undefined) {
   if (page === "eventCodes") return `PROJECTS / ${project.name} / EVENT`;
   if (page === "errorCodes") return `PROJECTS / ${project.name} / ERROR`;
   if (page === "dbSchema") return dbTable ? `PROJECTS / ${project.name} / DB SCHEMA / ${dbTable.name || "Untitled Table"}` : `PROJECTS / ${project.name} / DB SCHEMA`;
-  if (service) return `PROJECTS / ${project.name} / SERVICE / ${service.name}`;
+  if (service && serviceFolder) return `PROJECTS / ${project.name} / SERVICE / ${serviceFolder.name} / ${service.name}`;
+  if (service) return `PROJECTS / ${project.name} / SERVICE / General / ${service.name}`;
   return `PROJECTS / ${project.name} / SERVICE`;
 }
 
@@ -1359,34 +1576,46 @@ function validateProject(project: Project): Project {
   if (!project?.name || !Array.isArray(project.services) || !Array.isArray(project.event_code) || !Array.isArray(project.error_code)) {
     throw new Error("Invalid project");
   }
-  return { ...project, db_schema: Array.isArray(project.db_schema) ? project.db_schema : [] };
+  return {
+    ...project,
+    db_schema: Array.isArray(project.db_schema) ? project.db_schema : [],
+    service_folders: Array.isArray(project.service_folders) ? project.service_folders : [],
+  };
 }
 
 function cloneImportedProject(project: Project): Project {
-  validateProject(project);
+  const validatedProject = validateProject(project);
   const timestamp = now();
   const errorCodeIds = new Map<string, string>();
   const errorCodeIdsByCode = new Map<string, string>();
-  const errorCode = project.error_code.map((error) => {
+  const serviceFolderIds = new Map<string, string>();
+  const errorCode = validatedProject.error_code.map((error) => {
     const id = uid();
     errorCodeIds.set(error.id, id);
     errorCodeIdsByCode.set(error.code, id);
     return { ...error, id };
   });
+  const serviceFolders = validatedProject.service_folders.map((folder) => {
+    const id = uid();
+    serviceFolderIds.set(folder.id, id);
+    return { ...folder, id, createdAt: timestamp, updatedAt: timestamp };
+  });
 
   return {
     id: uid(),
-    name: project.name,
-    event_code: project.event_code.map((eventCode) => ({ ...eventCode, id: uid() })),
+    name: validatedProject.name,
+    event_code: validatedProject.event_code.map((eventCode) => ({ ...eventCode, id: uid() })),
     error_code: errorCode,
-    db_schema: project.db_schema.map((table) => ({
+    service_folders: serviceFolders,
+    db_schema: validatedProject.db_schema.map((table) => ({
       ...table,
       id: uid(),
       columns: table.columns.map((column) => ({ ...column, id: uid() })),
     })),
-    services: project.services.map((service) => ({
+    services: validatedProject.services.map((service) => ({
       ...service,
       id: uid(),
+      folderId: service.folderId ? serviceFolderIds.get(service.folderId) : undefined,
       updatedAt: timestamp,
       spec: {
         ...service.spec,

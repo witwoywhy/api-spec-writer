@@ -1,4 +1,4 @@
-import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, StoreDocument } from "../domain";
+import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceFolder, ServiceSpec, ServiceType, StoreDocument } from "../domain";
 
 const DOCUMENT_STORAGE_KEY = "api-spec-writer-platform:v1";
 const TABLE_STORAGE_KEY = "api-spec-writer-platform:tables:v1";
@@ -13,6 +13,7 @@ export type ProjectStoreAdaptor = {
   getSnapshot(): Promise<StoreDocument>;
   createProject(project: Project, fileName?: string): Promise<Project>;
   saveProject(project: Project): Promise<Project>;
+  reorderProjects(projectIds: string[]): Promise<void>;
   renameProject(projectId: string, name: string): Promise<Project>;
   archiveProject(projectId: string): Promise<void>;
   createEventCode(projectId: string, eventCode: EventCode): Promise<EventCode>;
@@ -59,6 +60,10 @@ type ServiceRow = Service & {
   projectId: string;
 };
 
+type ServiceFolderRow = ServiceFolder & {
+  projectId: string;
+};
+
 type LegacyServiceSpec = Omit<Partial<ServiceSpec>, "errors" | "type"> & {
   name: string;
   errors?: LegacyErrorCode[];
@@ -78,6 +83,7 @@ type ProjectTableDocument = {
     projects: ProjectRow[];
     event_codes: EventCodeRow[];
     error_codes: ErrorCodeRow[];
+    service_folders: ServiceFolderRow[];
     services: ServiceRow[];
   };
 };
@@ -96,6 +102,7 @@ type ProjectDetailDocument = {
   event_code: EventCode[];
   error_code: ErrorCode[];
   db_schema: DbTable[];
+  service_folders: ServiceFolder[];
   services: Service[];
 };
 
@@ -121,6 +128,7 @@ const emptyTableDocument: ProjectTableDocument = {
     projects: [],
     event_codes: [],
     error_codes: [],
+    service_folders: [],
     services: [],
   },
 };
@@ -166,6 +174,17 @@ export const localStorageProjectStore: ProjectStoreAdaptor = {
     writeProjectIndex(index);
     await writeProjectFile(normalizedProject);
     return normalizedProject;
+  },
+
+  async reorderProjects(projectIds) {
+    const index = readPersistedProjectIndex();
+    const order = new Map(projectIds.map((projectId, index) => [projectId, index]));
+    index.projects = [...index.projects].sort((left, right) => {
+      const leftIndex = order.get(left.id) ?? Number.MAX_SAFE_INTEGER;
+      const rightIndex = order.get(right.id) ?? Number.MAX_SAFE_INTEGER;
+      return leftIndex - rightIndex;
+    });
+    writeProjectIndex(index);
   },
 
   async renameProject(projectId, name) {
@@ -382,6 +401,7 @@ function projectToDetailDocument(project: Project): ProjectDetailDocument {
     event_code: project.event_code,
     error_code: project.error_code,
     db_schema: project.db_schema,
+    service_folders: project.service_folders,
     services: project.services,
   };
 }
@@ -395,6 +415,7 @@ function detailDocumentToProject(projectDetail: ProjectDetailDocument): Project 
     event_code: Array.isArray(projectDetail.event_code) ? projectDetail.event_code : [],
     error_code: Array.isArray(projectDetail.error_code) ? projectDetail.error_code.map(normalizeErrorCode) : [],
     db_schema: normalizeDbSchema(projectDetail.db_schema),
+    service_folders: normalizeServiceFolders(projectDetail.service_folders),
     services: Array.isArray(projectDetail.services) ? projectDetail.services.map(normalizeService) : [],
   });
 }
@@ -408,6 +429,7 @@ function normalizeProject(project: Project): Project {
     event_code: Array.isArray(project.event_code) ? project.event_code : [],
     error_code: Array.isArray(project.error_code) ? project.error_code.map(normalizeErrorCode) : [],
     db_schema: normalizeDbSchema(project.db_schema),
+    service_folders: normalizeServiceFolders(project.service_folders),
     services: Array.isArray(project.services) ? project.services.map(normalizeService) : [],
   };
 }
@@ -428,6 +450,7 @@ async function projectIndexToStore(projectIndex: ProjectListDocument): Promise<S
       event_code: [],
       error_code: [],
       db_schema: [],
+      service_folders: [],
       services: [],
     };
   }));
@@ -579,6 +602,7 @@ function normalizeTableDocument(tableDocument: ProjectTableDocument): ProjectTab
       projects: Array.isArray(tableDocument.tables?.projects) ? tableDocument.tables.projects : [],
       event_codes: Array.isArray(tableDocument.tables?.event_codes) ? tableDocument.tables.event_codes : [],
       error_codes: Array.isArray(tableDocument.tables?.error_codes) ? tableDocument.tables.error_codes.map(normalizeErrorCodeRow) : [],
+      service_folders: Array.isArray(tableDocument.tables?.service_folders) ? tableDocument.tables.service_folders.map(normalizeServiceFolderRow) : [],
       services: Array.isArray(tableDocument.tables?.services) ? tableDocument.tables.services.map(normalizeServiceRow) : [],
     },
   };
@@ -603,6 +627,12 @@ function storeToTableDocument(store: StoreDocument): ProjectTableDocument {
       error_codes: store.projects.flatMap((project) =>
         project.error_code.map((errorCode) => ({
           ...normalizeErrorCode(errorCode),
+          projectId: project.id,
+        })),
+      ),
+      service_folders: store.projects.flatMap((project) =>
+        project.service_folders.map((folder) => ({
+          ...normalizeServiceFolder(folder),
           projectId: project.id,
         })),
       ),
@@ -636,6 +666,9 @@ function tableRowsToProject(project: ProjectRow, tableDocument: ProjectTableDocu
       .filter((errorCode) => errorCode.projectId === project.id)
       .map(({ projectId: _projectId, ...errorCode }) => normalizeErrorCode(errorCode)),
     db_schema: [],
+    service_folders: tableDocument.tables.service_folders
+      .filter((folder) => folder.projectId === project.id)
+      .map(({ projectId: _projectId, ...folder }) => normalizeServiceFolder(folder)),
     services: tableDocument.tables.services
       .filter((service) => service.projectId === project.id)
       .map(({ projectId: _projectId, ...service }) => normalizeService(service)),
@@ -688,6 +721,27 @@ function normalizeDbConstraint(value: unknown) {
   return "NONE";
 }
 
+function normalizeServiceFolders(value: unknown): ServiceFolder[] {
+  if (!Array.isArray(value)) return [];
+  return value.map(normalizeServiceFolder);
+}
+
+function normalizeServiceFolder(folder: Partial<ServiceFolder>): ServiceFolder {
+  return {
+    id: folder.id ?? crypto.randomUUID(),
+    name: folder.name ?? "General",
+    createdAt: folder.createdAt ?? nowIso(),
+    updatedAt: folder.updatedAt ?? folder.createdAt ?? nowIso(),
+  };
+}
+
+function normalizeServiceFolderRow(folder: Partial<ServiceFolderRow>): ServiceFolderRow {
+  return {
+    ...normalizeServiceFolder(folder),
+    projectId: folder.projectId ?? "",
+  };
+}
+
 function normalizeServiceRow(service: LegacyService & { projectId: string }): ServiceRow {
   return {
     ...normalizeService(service),
@@ -698,6 +752,7 @@ function normalizeServiceRow(service: LegacyService & { projectId: string }): Se
 function normalizeService(service: LegacyService): Service {
   return {
     id: service.id,
+    folderId: service.folderId,
     name: service.name,
     updatedAt: service.updatedAt,
     spec: {

@@ -32,7 +32,15 @@ export type ServiceSpec = {
 
 export type Service = {
   id: string;
+  folderId?: string;
   name: string;
   spec: ServiceSpec;
+  updatedAt: string;
+};
+
+export type ServiceFolder = {
+  id: string;
+  name: string;
+  createdAt: string;
   updatedAt: string;
 };

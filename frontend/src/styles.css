@@ -251,6 +251,37 @@ textarea:focus {
   background: rgba(255, 255, 255, 0.08);
 }
 
+.tree-row[draggable="true"] {
+  cursor: grab;
+}
+
+.tree-row[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.tree-row.dragging {
+  opacity: 0.45;
+  transform: scale(0.985);
+}
+
+.tree-row.drop-target {
+  background: rgba(20, 184, 166, 0.22);
+  border-color: rgba(20, 184, 166, 0.8);
+  color: #ffffff;
+}
+
+.tree-row.drop-target::before {
+  background: #2dd4bf;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18);
+  content: "";
+  height: 3px;
+  left: 6px;
+  position: absolute;
+  right: 6px;
+  top: -3px;
+}
+
 .tree-row.active {
   border-color: rgba(20, 184, 166, 0.65);
   background: rgba(20, 184, 166, 0.16);
@@ -396,6 +427,42 @@ textarea:focus {
   gap: 8px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.workspace-breadcrumb {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+  min-width: 0;
+}
+
+.workspace-breadcrumb span,
+.workspace-breadcrumb button {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.workspace-breadcrumb button {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0;
+  text-overflow: ellipsis;
+  text-transform: inherit;
+  white-space: nowrap;
+}
+
+.workspace-breadcrumb button:hover {
+  background: transparent;
+  text-decoration: underline;
+}
+
+.workspace-breadcrumb button:disabled {
+  color: var(--muted);
+  cursor: default;
+  text-decoration: none;
 }
 
 .save-error {
