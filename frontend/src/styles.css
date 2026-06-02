@@ -1087,6 +1087,27 @@ label span {
   grid-template-columns: 28px 1fr 0.9fr 0.55fr 0.85fr 1.35fr 36px;
 }
 
+.row.schema-row {
+  position: relative;
+}
+
+.row.schema-row.drop-target {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.55);
+}
+
+.row.schema-row.drop-target::before {
+  background: #14b8a6;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+  content: "";
+  height: 3px;
+  left: 8px;
+  position: absolute;
+  right: 8px;
+  top: -5px;
+}
+
 .schema-index-row {
   grid-template-columns: 1fr 1.4fr 0.65fr 0.5fr 36px;
 }

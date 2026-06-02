@@ -44,6 +44,7 @@ const AUDIT_COLUMNS: Array<Omit<DbColumn, "id">> = [
 
 export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: DbTable[]; selectedTableId: string; onChange: (tables: DbTable[]) => void }) {
   const [draggedColumnId, setDraggedColumnId] = useState("");
+  const [dropColumnId, setDropColumnId] = useState("");
   const selectedTable = tables.find((table) => table.id === selectedTableId) ?? tables[0];
   const updateTable = (id: string, patch: Partial<DbTable>) => {
     onChange(tables.map((table) => table.id === id ? { ...table, ...patch } : table));
@@ -104,6 +105,10 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
       return { ...table, columns };
     }));
   };
+  const clearColumnDrag = () => {
+    setDraggedColumnId("");
+    setDropColumnId("");
+  };
 
   return (
     <section className="panel code-page">
@@ -132,13 +137,19 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
             )}
             {selectedTable.columns.map((column) => (
               <div
-                className={draggedColumnId === column.id ? "row schema-row dragging" : "row schema-row"}
+                className={schemaColumnRowClass(column.id, draggedColumnId, dropColumnId)}
                 key={column.id}
-                onDragOver={(event) => event.preventDefault()}
+                onDragOver={(event) => {
+                  event.preventDefault();
+                  if (draggedColumnId && draggedColumnId !== column.id) setDropColumnId(column.id);
+                }}
+                onDragLeave={() => {
+                  if (dropColumnId === column.id) setDropColumnId("");
+                }}
                 onDrop={(event) => {
                   event.preventDefault();
                   moveColumn(selectedTable.id, event.dataTransfer.getData("text/plain") || draggedColumnId, column.id);
-                  setDraggedColumnId("");
+                  clearColumnDrag();
                 }}
               >
                 <span
@@ -153,7 +164,7 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
                     event.dataTransfer.effectAllowed = "move";
                     event.dataTransfer.setData("text/plain", column.id);
                   }}
-                  onDragEnd={() => setDraggedColumnId("")}
+                  onDragEnd={clearColumnDrag}
                 >
                   <GripVertical size={16} />
                 </span>
@@ -226,6 +237,13 @@ export function DbSchemaPage({ tables, selectedTableId, onChange }: { tables: Db
       </div>
     </section>
   );
+}
+
+function schemaColumnRowClass(columnId: string, draggedColumnId: string, dropColumnId: string) {
+  const classes = ["row schema-row"];
+  if (draggedColumnId === columnId) classes.push("dragging");
+  if (dropColumnId === columnId) classes.push("drop-target");
+  return classes.join(" ");
 }
 
 function MultiSelectDropdown({
