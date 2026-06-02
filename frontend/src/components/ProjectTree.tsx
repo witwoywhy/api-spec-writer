@@ -73,7 +73,7 @@ export function ProjectTree({
   onMoveProject: (sourceProjectId: string, targetProjectId: string) => void;
   onMoveDbTable: (project: Project, sourceTableId: string, targetTableId: string) => void;
   onMoveServiceFolder: (project: Project, sourceFolderId: string, targetFolderId: string) => void;
-  onMoveService: (project: Project, folderId: string, sourceServiceId: string, targetServiceId: string) => void;
+  onMoveService: (project: Project, sourceFolderId: string, targetFolderId: string, sourceServiceId: string, targetServiceId?: string) => void;
   showProjectActions: boolean;
 }) {
   const [dragItem, setDragItem] = useState<TreeDragItem | null>(null);
@@ -313,6 +313,11 @@ export function ProjectTree({
                                 if (!folder.virtual && dragItem?.type === "serviceFolder" && dragItem.projectId === project.id && dragItem.id !== folder.id) {
                                   event.preventDefault();
                                   setDropTarget({ type: "serviceFolder", projectId: project.id, id: folder.id });
+                                  return;
+                                }
+                                if (dragItem?.type === "service" && dragItem.projectId === project.id && dragItem.folderId !== folder.id) {
+                                  event.preventDefault();
+                                  setDropTarget({ type: "serviceFolder", projectId: project.id, id: folder.id });
                                 }
                               }}
                               onDragLeave={() => {
@@ -321,6 +326,7 @@ export function ProjectTree({
                               onDrop={(event) => {
                                 event.preventDefault();
                                 if (!folder.virtual && dragItem?.type === "serviceFolder" && dragItem.projectId === project.id && dragItem.id !== folder.id) onMoveServiceFolder(project, dragItem.id, folder.id);
+                                if (dragItem?.type === "service" && dragItem.projectId === project.id && dragItem.folderId !== folder.id) onMoveService(project, dragItem.folderId, folder.id, dragItem.id);
                                 clearDragState();
                               }}
                               onClick={() => onToggleServiceFolder(folderKey)}
@@ -388,7 +394,7 @@ export function ProjectTree({
                                     }}
                                     onDragEnd={clearDragState}
                                     onDragOver={(event) => {
-                                      if (dragItem?.type === "service" && dragItem.projectId === project.id && dragItem.folderId === folder.id && dragItem.id !== service.id) {
+                                      if (dragItem?.type === "service" && dragItem.projectId === project.id && dragItem.id !== service.id) {
                                         event.preventDefault();
                                         setDropTarget({ type: "service", projectId: project.id, folderId: folder.id, id: service.id });
                                       }
@@ -398,7 +404,7 @@ export function ProjectTree({
                                     }}
                                     onDrop={(event) => {
                                       event.preventDefault();
-                                      if (dragItem?.type === "service" && dragItem.projectId === project.id && dragItem.folderId === folder.id && dragItem.id !== service.id) onMoveService(project, folder.id, dragItem.id, service.id);
+                                      if (dragItem?.type === "service" && dragItem.projectId === project.id && dragItem.id !== service.id) onMoveService(project, dragItem.folderId, folder.id, dragItem.id, service.id);
                                       clearDragState();
                                     }}
                                     onClick={() => onSelectService(project, service)}

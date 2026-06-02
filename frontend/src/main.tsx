@@ -395,9 +395,9 @@ function App() {
     applyProjectChange(project.id, (current) => replaceServiceFoldersInStore(current, project.id, moveById(project.service_folders, sourceFolderId, targetFolderId)));
   };
 
-  const moveService = (project: Project, folderId: string, sourceServiceId: string, targetServiceId: string) => {
+  const moveService = (project: Project, sourceFolderId: string, targetFolderId: string, sourceServiceId: string, targetServiceId?: string) => {
     if (sourceServiceId === targetServiceId) return;
-    applyProjectChange(project.id, (current) => moveServiceInStore(current, project.id, folderId, sourceServiceId, targetServiceId));
+    applyProjectChange(project.id, (current) => moveServiceInStore(current, project.id, sourceFolderId, targetFolderId, sourceServiceId, targetServiceId));
   };
 
   const createDbTable = (projectId = selectedProject?.id) => {
@@ -1044,24 +1044,30 @@ function removeServiceFolderInStore(store: StoreDocument, projectId: string, fol
   };
 }
 
-function moveServiceInStore(store: StoreDocument, projectId: string, folderId: string, sourceServiceId: string, targetServiceId: string): StoreDocument {
+function moveServiceInStore(store: StoreDocument, projectId: string, sourceFolderId: string, targetFolderId: string, sourceServiceId: string, targetServiceId?: string): StoreDocument {
   const timestamp = now();
   return {
     ...store,
     projects: store.projects.map((project) => {
       if (project.id !== projectId) return project;
-      const sameFolder = (service: Service) => serviceFolderId(service) === folderId;
-      const folderServices = moveById(project.services.filter(sameFolder), sourceServiceId, targetServiceId);
-      const folderServiceIds = new Set(folderServices.map((service) => service.id));
-      let serviceIndex = 0;
+      const sourceService = project.services.find((service) => service.id === sourceServiceId && serviceFolderId(service) === sourceFolderId);
+      if (!sourceService) return project;
+
+      const targetFolderValue = targetFolderId === GENERAL_SERVICE_FOLDER_ID ? undefined : targetFolderId;
+      const movedService: Service = { ...sourceService, folderId: targetFolderValue, updatedAt: timestamp };
+      const remainingServices = project.services.filter((service) => service.id !== sourceServiceId);
+      const targetServiceIndex = targetServiceId ? remainingServices.findIndex((service) => service.id === targetServiceId && serviceFolderId(service) === targetFolderId) : -1;
+      let lastTargetFolderServiceIndex = -1;
+      remainingServices.forEach((service, index) => {
+        if (serviceFolderId(service) === targetFolderId) lastTargetFolderServiceIndex = index;
+      });
+      const insertIndex = targetServiceIndex >= 0 ? targetServiceIndex : lastTargetFolderServiceIndex + 1 || remainingServices.length;
+      const services = [...remainingServices];
+      services.splice(insertIndex, 0, movedService);
+
       return {
         ...project,
-        services: project.services.map((service) => {
-          if (!folderServiceIds.has(service.id)) return service;
-          const nextService = folderServices[serviceIndex];
-          serviceIndex += 1;
-          return nextService;
-        }),
+        services,
         updatedAt: timestamp,
       };
     }),
