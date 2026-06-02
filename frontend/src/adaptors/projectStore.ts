@@ -1,4 +1,4 @@
-import type { ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, StoreDocument } from "../domain";
+import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceSpec, ServiceType, StoreDocument } from "../domain";
 
 const DOCUMENT_STORAGE_KEY = "api-spec-writer-platform:v1";
 const TABLE_STORAGE_KEY = "api-spec-writer-platform:tables:v1";
@@ -95,6 +95,7 @@ type ProjectDetailDocument = {
   updatedAt: string;
   event_code: EventCode[];
   error_code: ErrorCode[];
+  db_schema: DbTable[];
   services: Service[];
 };
 
@@ -380,6 +381,7 @@ function projectToDetailDocument(project: Project): ProjectDetailDocument {
     updatedAt: project.updatedAt,
     event_code: project.event_code,
     error_code: project.error_code,
+    db_schema: project.db_schema,
     services: project.services,
   };
 }
@@ -392,6 +394,7 @@ function detailDocumentToProject(projectDetail: ProjectDetailDocument): Project 
     updatedAt: projectDetail.updatedAt,
     event_code: Array.isArray(projectDetail.event_code) ? projectDetail.event_code : [],
     error_code: Array.isArray(projectDetail.error_code) ? projectDetail.error_code.map(normalizeErrorCode) : [],
+    db_schema: normalizeDbSchema(projectDetail.db_schema),
     services: Array.isArray(projectDetail.services) ? projectDetail.services.map(normalizeService) : [],
   });
 }
@@ -404,6 +407,7 @@ function normalizeProject(project: Project): Project {
     updatedAt: project.updatedAt,
     event_code: Array.isArray(project.event_code) ? project.event_code : [],
     error_code: Array.isArray(project.error_code) ? project.error_code.map(normalizeErrorCode) : [],
+    db_schema: normalizeDbSchema(project.db_schema),
     services: Array.isArray(project.services) ? project.services.map(normalizeService) : [],
   };
 }
@@ -423,6 +427,7 @@ async function projectIndexToStore(projectIndex: ProjectListDocument): Promise<S
       updatedAt: project.updatedAt,
       event_code: [],
       error_code: [],
+      db_schema: [],
       services: [],
     };
   }));
@@ -630,10 +635,53 @@ function tableRowsToProject(project: ProjectRow, tableDocument: ProjectTableDocu
     error_code: tableDocument.tables.error_codes
       .filter((errorCode) => errorCode.projectId === project.id)
       .map(({ projectId: _projectId, ...errorCode }) => normalizeErrorCode(errorCode)),
+    db_schema: [],
     services: tableDocument.tables.services
       .filter((service) => service.projectId === project.id)
       .map(({ projectId: _projectId, ...service }) => normalizeService(service)),
   };
+}
+
+function normalizeDbSchema(value: unknown): DbTable[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((table) => {
+    const dbTable = table as Partial<DbTable>;
+    return {
+      id: dbTable.id ?? crypto.randomUUID(),
+      name: dbTable.name ?? "",
+      columns: Array.isArray(dbTable.columns) ? dbTable.columns.map((column) => ({
+        id: column.id ?? crypto.randomUUID(),
+        field: column.field ?? "",
+        type: column.type ?? "uuid",
+        nullable: column.nullable === "YES" ? "YES" : "NO",
+        constraint: normalizeDbConstraint(column.constraint),
+        description: column.description ?? "",
+      })) : [],
+      indexes: Array.isArray(dbTable.indexes) ? dbTable.indexes.map((index) => ({
+        id: index.id ?? crypto.randomUUID(),
+        name: index.name ?? "",
+        columnIds: normalizeDbIndexColumnIds(index),
+        type: normalizeDbIndexType(index.type),
+        unique: index.unique === "YES" ? "YES" : "NO",
+      })) : [],
+    };
+  });
+}
+
+function normalizeDbIndexColumnIds(index: unknown) {
+  const dbIndex = index as { columnId?: string; columnIds?: string[] };
+  if (Array.isArray(dbIndex.columnIds)) return dbIndex.columnIds.filter((columnId) => typeof columnId === "string");
+  return dbIndex.columnId ? [dbIndex.columnId] : [];
+}
+
+function normalizeDbIndexType(value: unknown) {
+  if (value === "HASH" || value === "GIN" || value === "GIST" || value === "BRIN") return value;
+  return "BTREE";
+}
+
+function normalizeDbConstraint(value: unknown) {
+  if (value === "PRIMARY KEY" || value === "UNIQUE" || value === "FOREIGN KEY" || value === "CHECK" || value === "DEFAULT" || value === "INDEX") return value;
+  return "NONE";
 }
 
 function normalizeServiceRow(service: LegacyService & { projectId: string }): ServiceRow {

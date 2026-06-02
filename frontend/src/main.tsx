@@ -3,11 +3,12 @@ import { createRoot } from "react-dom/client";
 import { Braces, Columns2, Download, Edit3, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore, registerProjectFileHandle, type ProjectFileHandle } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
+import { DbSchemaPage } from "./components/DbSchemaPage";
 import { HtmlPreview, MarkdownPreview } from "./components/MarkdownPreview";
 import { OpenApiPreview } from "./components/OpenApiPreview";
 import { type Page, ProjectTree } from "./components/ProjectTree";
 import { ServiceEditor } from "./components/ServiceEditor";
-import type { ErrorCode, EventCode, Project, Service, ServiceSpec, StoreDocument } from "./domain";
+import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceSpec, StoreDocument } from "./domain";
 import { buildAppPath, parseAppRoute } from "./lib/appRouter";
 import { serviceGoStruct } from "./lib/goStructPreview";
 import { uid } from "./lib/id";
@@ -16,7 +17,7 @@ import { createDefaultErrorCodes, createDefaultSpec } from "./lib/serviceDefault
 import { serviceMarkdown } from "./lib/serviceMarkdown";
 import "./styles.css";
 
-type MarkdownMode = "markdown" | "html" | "openapi" | "gostruct";
+type MarkdownMode = "markdown" | "html" | "openapi" | "gostruct" | "sql";
 type ViewMode = "split" | "edit" | "preview";
 type ProjectFilePicker = {
   showOpenFilePicker?: (options?: {
@@ -46,6 +47,7 @@ function App() {
   const [store, setStore] = useState<StoreDocument>({ schemaVersion: 1, projects: [] });
   const [selectedProjectId, setSelectedProjectId] = useState(initialRoute.projectId);
   const [selectedServiceId, setSelectedServiceId] = useState(initialRoute.serviceId);
+  const [selectedDbTableId, setSelectedDbTableId] = useState(initialRoute.dbTableId);
   const [page, setPage] = useState<Page>(initialRoute.page);
   const [viewMode, setViewMode] = useState<ViewMode>(initialViewMode);
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>(initialMarkdownMode);
@@ -53,6 +55,7 @@ function App() {
   const [saveError, setSaveError] = useState("");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
+  const [openDbSchemas, setOpenDbSchemas] = useState<Set<string>>(() => new Set());
   const serviceLayoutRef = useRef<HTMLDivElement>(null);
   const htmlExportRef = useRef<HTMLDivElement>(null);
   const latestStoreRef = useRef(store);
@@ -61,11 +64,23 @@ function App() {
   const projectSaveChainsRef = useRef<Map<string, Promise<void>>>(new Map());
   const selectedProject = store.projects.find((project) => project.id === selectedProjectId) ?? store.projects[0];
   const selectedService = selectedProject?.services.find((service) => service.id === selectedServiceId) ?? selectedProject?.services[0];
+  const selectedDbTable = selectedProject?.db_schema.find((table) => table.id === selectedDbTableId) ?? selectedProject?.db_schema[0];
   const shouldRenderServicePreview = page === "services" && viewMode !== "edit" && Boolean(selectedService);
+  const shouldRenderDbSchemaPreview = page === "dbSchema" && viewMode !== "edit";
+  const isFullPreview = (page === "services" || page === "dbSchema") && viewMode === "preview";
   const shouldBuildMarkdown = shouldRenderServicePreview && (markdownMode === "markdown" || markdownMode === "html");
   const markdown = useMemo(
     () => shouldBuildMarkdown && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
     [selectedProject?.error_code, selectedService, shouldBuildMarkdown],
+  );
+  const dbSchemaPreviewMarkdown = useMemo(
+    () => shouldRenderDbSchemaPreview && selectedProject ? dbSchemaMarkdown(selectedProject) : "",
+    [selectedProject, shouldRenderDbSchemaPreview],
+  );
+  const dbSchemaPreviewMode = markdownMode === "html" || markdownMode === "sql" ? markdownMode : "markdown";
+  const dbSchemaSql = useMemo(
+    () => shouldRenderDbSchemaPreview && selectedProject ? dbSchemaSqlPreview(selectedProject.db_schema) : "",
+    [selectedProject, shouldRenderDbSchemaPreview],
   );
   const openApiDocument = useMemo(
     () => shouldRenderServicePreview && markdownMode === "openapi" && selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
@@ -171,8 +186,15 @@ function App() {
       if (routeProject?.services.some((service) => service.id === initialRoute.serviceId)) return initialRoute.serviceId;
       return "";
     });
+    setSelectedDbTableId((current) => {
+      if (snapshot.projects.some((project) => project.db_schema.some((table) => table.id === current))) return current;
+      const routeProject = snapshot.projects.find((project) => project.id === initialRoute.projectId);
+      if (routeProject?.db_schema.some((table) => table.id === initialRoute.dbTableId)) return initialRoute.dbTableId;
+      return "";
+    });
     setOpenProjects((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
     setOpenServices((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
+    setOpenDbSchemas((current) => mergeOpenIds(current, snapshot.projects.map((project) => project.id)));
   }, []);
 
   useEffect(() => {
@@ -217,6 +239,7 @@ function App() {
       const route = parseAppRoute(window.location.pathname);
       setSelectedProjectId(route.projectId);
       setSelectedServiceId(route.serviceId);
+      setSelectedDbTableId(route.dbTableId);
       setPage(route.page);
       const searchParams = new URLSearchParams(window.location.search);
       setViewMode(parseViewMode(searchParams));
@@ -231,11 +254,12 @@ function App() {
       page,
       projectId: selectedProject?.id ?? "",
       serviceId: page === "services" ? (selectedService?.id ?? "") : "",
+      dbTableId: page === "dbSchema" ? (selectedDbTable?.id ?? "") : "",
     });
-    const search = page === "services" && selectedService ? serviceSearchParams(viewMode) : "";
+    const search = (page === "services" && selectedService) || page === "dbSchema" ? serviceSearchParams(viewMode) : "";
     const url = `${path}${search}`;
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
-  }, [page, selectedProject?.id, selectedService, selectedService?.id, viewMode]);
+  }, [page, selectedDbTable?.id, selectedProject?.id, selectedService, selectedService?.id, viewMode]);
 
   const toggleProject = (projectId: string) => {
     setOpenProjects((current) => toggleSetValue(current, projectId));
@@ -243,6 +267,10 @@ function App() {
 
   const toggleServices = (projectId: string) => {
     setOpenServices((current) => toggleSetValue(current, projectId));
+  };
+
+  const toggleDbSchema = (projectId: string) => {
+    setOpenDbSchemas((current) => toggleSetValue(current, projectId));
   };
 
   const createProject = async () => {
@@ -256,6 +284,7 @@ function App() {
       name: name.trim(),
       event_code: [],
       error_code: createDefaultErrorCodes(),
+      db_schema: [],
       services: [service],
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -266,6 +295,7 @@ function App() {
     await refreshStore();
     setSelectedProjectId(project.id);
     setSelectedServiceId(service.id);
+    setSelectedDbTableId("");
   };
 
   const addEventCode = async () => {
@@ -300,6 +330,21 @@ function App() {
     setSelectedServiceId(service.id);
   };
 
+  const createDbTable = (projectId = selectedProject?.id) => {
+    if (!projectId) return;
+    const name = window.prompt("Table name");
+    if (!name?.trim()) return;
+    const table: DbTable = { id: uid(), name: name.trim(), columns: [], indexes: [] };
+    setOpenDbSchemas((current) => new Set(current).add(projectId));
+    setSelectedProjectId(projectId);
+    setSelectedDbTableId(table.id);
+    setPage("dbSchema");
+    applyProjectChange(projectId, (current) => replaceDbSchemaInStore(current, projectId, [
+      ...((current.projects.find((project) => project.id === projectId)?.db_schema) ?? []),
+      table,
+    ]));
+  };
+
   const renameProject = async (project: Project) => {
     const name = window.prompt("Project name", project.name);
     if (!name?.trim()) return;
@@ -318,6 +363,7 @@ function App() {
     setStore(snapshot);
     setSelectedProjectId(nextProject?.id ?? "");
     setSelectedServiceId(nextProject?.services[0]?.id ?? "");
+    setSelectedDbTableId(nextProject?.db_schema[0]?.id ?? "");
     setPage("services");
   };
 
@@ -341,6 +387,7 @@ function App() {
     setStore(snapshot);
     setSelectedProjectId(refreshedProject?.id ?? "");
     setSelectedServiceId(refreshedProject?.services[0]?.id ?? "");
+    setSelectedDbTableId(refreshedProject?.db_schema[0]?.id ?? "");
     setPage("services");
   };
 
@@ -385,6 +432,22 @@ function App() {
     }
     exportMarkdown();
   };
+  const exportDbSchemaPreview = () => {
+    if (!selectedProject) return;
+    const dbSchemaBaseName = `${safeFileName(selectedProject.name)}-db-schema`;
+    if (dbSchemaPreviewMode === "sql") {
+      if (!dbSchemaSql.trim()) return;
+      downloadFile(`${dbSchemaBaseName}.sql`, dbSchemaSql, "text/plain;charset=utf-8");
+      return;
+    }
+    if (!dbSchemaPreviewMarkdown.trim()) return;
+    if (dbSchemaPreviewMode === "html") {
+      const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(dbSchemaPreviewMarkdown);
+      downloadFile(`${dbSchemaBaseName}.html`, buildHtmlDocument(`${selectedProject.name} DB Schema`, html), "text/html;charset=utf-8");
+      return;
+    }
+    downloadFile(`${dbSchemaBaseName}.md`, dbSchemaPreviewMarkdown, "text/markdown;charset=utf-8");
+  };
   const exportProjectPreview = () => {
     if (!selectedProject) return;
     const projectBaseName = safeFileName(selectedProject.name);
@@ -399,6 +462,12 @@ function App() {
         .join("\n\n");
       if (!content.trim()) return;
       downloadFile(`${projectBaseName}.go`, content, "text/plain;charset=utf-8");
+      return;
+    }
+    if (markdownMode === "sql") {
+      const content = dbSchemaSqlPreview(selectedProject.db_schema);
+      if (!content.trim()) return;
+      downloadFile(`${projectBaseName}.sql`, content, "text/plain;charset=utf-8");
       return;
     }
 
@@ -422,6 +491,7 @@ function App() {
       await refreshStore();
       setSelectedProjectId(project.id);
       setSelectedServiceId(project.services[0]?.id ?? "");
+      setSelectedDbTableId(project.db_schema[0]?.id ?? "");
       setPage("services");
     } catch {
       window.alert("Project JSON is invalid.");
@@ -446,27 +516,40 @@ function App() {
           projects={store.projects}
           selectedProjectId={selectedProject?.id ?? ""}
           selectedServiceId={selectedService?.id ?? ""}
+          selectedDbTableId={selectedDbTable?.id ?? ""}
           page={page}
           openProjects={openProjects}
           openServices={openServices}
+          openDbSchemas={openDbSchemas}
           onToggleProject={toggleProject}
           onToggleServices={toggleServices}
+          onToggleDbSchema={toggleDbSchema}
           onSelectProject={(project) => {
             setSelectedProjectId(project.id);
             setSelectedServiceId(project.services[0]?.id ?? "");
+            setSelectedDbTableId("");
             setPage("services");
           }}
           onSelectEventCodes={(project) => {
             setSelectedProjectId(project.id);
+            setSelectedDbTableId("");
             setPage("eventCodes");
           }}
           onSelectErrorCodes={(project) => {
             setSelectedProjectId(project.id);
+            setSelectedDbTableId("");
             setPage("errorCodes");
           }}
+          onSelectDbSchema={(project) => {
+            setSelectedProjectId(project.id);
+            setSelectedDbTableId(project.db_schema[0]?.id ?? "");
+            setPage("dbSchema");
+          }}
+          onCreateDbTable={(project) => createDbTable(project.id)}
           onSelectServices={(project) => {
             setSelectedProjectId(project.id);
             setSelectedServiceId(project.services[0]?.id ?? "");
+            setSelectedDbTableId("");
             setPage("services");
           }}
           onRenameProject={renameProject}
@@ -479,7 +562,13 @@ function App() {
           onSelectService={(project, service) => {
             setSelectedProjectId(project.id);
             setSelectedServiceId(service.id);
+            setSelectedDbTableId("");
             setPage("services");
+          }}
+          onSelectDbTable={(project, table) => {
+            setSelectedProjectId(project.id);
+            setSelectedDbTableId(table.id);
+            setPage("dbSchema");
           }}
           showProjectActions={viewMode !== "preview"}
         />
@@ -493,7 +582,7 @@ function App() {
         </div>
       </aside>
 
-      <main className="workspace">
+      <main className={isFullPreview ? "workspace workspace-preview" : "workspace"}>
         {!selectedProject ? (
           <div className="empty-state">
             <FolderPlus size={40} />
@@ -504,7 +593,7 @@ function App() {
           <>
             <header className="workspace-header">
               <div className="workspace-path">
-                <p className="eyebrow">{workspacePathLabel(page, selectedProject, selectedService)}</p>
+                <p className="eyebrow">{workspacePathLabel(page, selectedProject, selectedService, selectedDbTable)}</p>
                 {page === "services" && selectedService && viewMode !== "preview" ? (
                   <div className="workspace-actions">
                     <button type="button" onClick={renameService}>
@@ -516,7 +605,7 @@ function App() {
                   </div>
                 ) : null}
               </div>
-              {page === "services" ? (
+              {page === "services" || page === "dbSchema" ? (
                 <div className="view-mode-control" aria-label="View mode">
                   <button className={viewMode === "split" ? "active" : ""} type="button" title="Editor and preview" aria-label="Editor and preview" onClick={() => setViewMode("split")}>
                     <Columns2 size={15} />
@@ -580,7 +669,7 @@ function App() {
                     <div className="panel-title">
                       <div className="preview-title">
                         <h3>Preview</h3>
-                        <select className="preview-select" value={markdownMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
+                        <select className="preview-select" value={markdownMode === "sql" ? "markdown" : markdownMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
                           <option value="markdown">Markdown</option>
                           <option value="html">HTML</option>
                           <option value="openapi">OpenAPI</option>
@@ -594,7 +683,7 @@ function App() {
                     {markdownMode === "markdown" ? (
                       <MarkdownPreview markdown={markdown} />
                     ) : markdownMode === "html" ? (
-                      <div ref={htmlExportRef}>
+                      <div ref={htmlExportRef} className="preview-export-frame">
                         <HtmlPreview markdown={markdown} />
                       </div>
                     ) : markdownMode === "openapi" ? (
@@ -603,6 +692,71 @@ function App() {
                       <GoStructPreview content={goStruct} />
                     ) : (
                       <MarkdownPreview markdown={markdown} />
+                    )}
+                  </section>
+                )}
+              </div>
+            )}
+
+            {page === "dbSchema" && (
+              <div ref={serviceLayoutRef} className={serviceLayoutClass(viewMode)} style={splitLayoutStyle}>
+                {viewMode !== "preview" && (
+                  <section className="panel editor-panel">
+                    <DbSchemaPage
+                      tables={selectedProject.db_schema}
+                      selectedTableId={selectedDbTable?.id ?? ""}
+                      onChange={(dbSchema) => {
+                        applyProjectChange(selectedProject.id, (current) => replaceDbSchemaInStore(current, selectedProject.id, dbSchema));
+                      }}
+                    />
+                  </section>
+                )}
+
+                {viewMode === "split" ? (
+                  <div
+                    className="split-divider"
+                    role="separator"
+                    aria-label="Resize editor and preview"
+                    aria-orientation="vertical"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowLeft") setEditorWidth((current) => Math.max(32, current - 4));
+                      if (event.key === "ArrowRight") setEditorWidth((current) => Math.min(72, current + 4));
+                    }}
+                    onPointerDown={(event) => {
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      resizeSplitPanels(event.clientX);
+                    }}
+                    onPointerMove={(event) => {
+                      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                      resizeSplitPanels(event.clientX);
+                    }}
+                  />
+                ) : null}
+
+                {viewMode !== "edit" && (
+                  <section className="panel preview-panel">
+                    <div className="panel-title">
+                      <div className="preview-title">
+                        <h3>Preview</h3>
+                        <select className="preview-select" value={dbSchemaPreviewMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
+                          <option value="markdown">Markdown</option>
+                          <option value="html">HTML</option>
+                          <option value="sql">SQL</option>
+                        </select>
+                      </div>
+                      <div className="preview-actions">
+                        <button type="button" onClick={exportDbSchemaPreview}><Download size={16} /> Export</button>
+                      </div>
+                    </div>
+                    {dbSchemaPreviewMode === "sql" ? (
+                      <CodePreview content={dbSchemaSql} emptyText="Create DB schema tables to preview SQL." />
+                    ) : dbSchemaPreviewMode === "html" ? (
+                      <div ref={htmlExportRef} className="preview-export-frame">
+                        <HtmlPreview markdown={dbSchemaPreviewMarkdown} />
+                      </div>
+                    ) : (
+                      <MarkdownPreview markdown={dbSchemaPreviewMarkdown} />
                     )}
                   </section>
                 )}
@@ -629,6 +783,7 @@ function App() {
                 }}
               />
             )}
+
           </>
         )}
       </main>
@@ -671,10 +826,14 @@ function readProjectDraft(projectId: string) {
   try {
     const draft = JSON.parse(raw) as ProjectDraft;
     if (draft.schemaVersion !== 1 || draft.project?.id !== projectId) return null;
-    return draft.project;
+    return normalizeProjectDraft(draft.project);
   } catch {
     return null;
   }
+}
+
+function normalizeProjectDraft(project: Project): Project {
+  return { ...project, db_schema: Array.isArray(project.db_schema) ? project.db_schema : [] };
 }
 
 function mergeProjectDrafts(store: StoreDocument): StoreDocument {
@@ -733,9 +892,20 @@ function replaceErrorCodesInStore(store: StoreDocument, projectId: string, error
   };
 }
 
-function workspacePathLabel(page: Page, project: Project, service: Service | undefined) {
+function replaceDbSchemaInStore(store: StoreDocument, projectId: string, dbSchema: DbTable[]): StoreDocument {
+  const timestamp = now();
+  return {
+    ...store,
+    projects: store.projects.map((project) => (
+      project.id === projectId ? { ...project, db_schema: dbSchema, updatedAt: timestamp } : project
+    )),
+  };
+}
+
+function workspacePathLabel(page: Page, project: Project, service: Service | undefined, dbTable: DbTable | undefined) {
   if (page === "eventCodes") return `PROJECTS / ${project.name} / EVENT`;
   if (page === "errorCodes") return `PROJECTS / ${project.name} / ERROR`;
+  if (page === "dbSchema") return dbTable ? `PROJECTS / ${project.name} / DB SCHEMA / ${dbTable.name || "Untitled Table"}` : `PROJECTS / ${project.name} / DB SCHEMA`;
   if (service) return `PROJECTS / ${project.name} / SERVICE / ${service.name}`;
   return `PROJECTS / ${project.name} / SERVICE`;
 }
@@ -749,14 +919,18 @@ function parseViewMode(searchParams: URLSearchParams): ViewMode {
 
 function parseMarkdownMode(searchParams: URLSearchParams, storedValue: string | null): MarkdownMode {
   const value = searchParams.get("preview-type") ?? storedValue;
-  if (value === "html" || value === "openapi" || value === "gostruct") return value;
+  if (value === "html" || value === "openapi" || value === "gostruct" || value === "sql") return value;
   return "markdown";
 }
 
 function GoStructPreview({ content }: { content: string }) {
-  if (!content.trim()) return <div className="markdown-preview empty-preview">Request and response BODY fields are required for Go struct preview.</div>;
+  return <CodePreview content={content} emptyText="Request and response BODY fields are required for Go struct preview." />;
+}
+
+function CodePreview({ content, emptyText }: { content: string; emptyText: string }) {
+  if (!content.trim()) return <div className="markdown-preview empty-preview">{emptyText}</div>;
   return (
-    <div className="markdown-preview">
+    <div className="markdown-preview code-preview">
       <pre><code>{content}</code></pre>
     </div>
   );
@@ -882,6 +1056,7 @@ function projectSpecMarkdown(project: Project) {
     `# ${project.name}`,
     eventCodesMarkdown(project),
     errorCodesMarkdown(project),
+    dbSchemaMarkdown(project),
     "## Services",
     ...project.services.map((service) => serviceMarkdown(service.spec, project.error_code)),
   ].filter((section) => section.trim()).join("\n\n");
@@ -915,6 +1090,114 @@ function errorCodesMarkdown(project: Project) {
   ].join("\n");
 }
 
+function dbSchemaMarkdown(project: Project) {
+  if (project.db_schema.length === 0) return "## DB Schema\n\nNo DB schema tables.";
+  return [
+    "## DB Schema",
+    ...project.db_schema.map((table) => {
+      const parts = [
+        `\n### ${escapePipe(table.name || "Untitled Table")}`,
+      ];
+      if (table.columns.length === 0) {
+        parts.push("No columns.");
+      } else {
+        parts.push(
+          "| Field | Type | Nullable | Constraint | Description |",
+          "|-------|------|----------|------------|-------------|",
+          ...table.columns.map((column) => [
+            escapePipe(column.field),
+            escapePipe(column.type),
+            escapePipe(column.nullable),
+            escapePipe(column.constraint === "NONE" ? "" : column.constraint),
+            escapePipe(column.description),
+          ].join(" | ")).map((cells) => `| ${cells} |`),
+        );
+      }
+      if ((table.indexes ?? []).length > 0) {
+        parts.push(
+          "\n#### Indexes",
+          "| Name | Columns | Type | Unique |",
+          "|------|---------|------|--------|",
+          ...(table.indexes ?? []).map((index) => [
+            escapePipe(index.name),
+            escapePipe(index.columnIds.map((columnId) => table.columns.find((column) => column.id === columnId)?.field ?? "").filter(Boolean).join(", ")),
+            escapePipe(index.type),
+            escapePipe(index.unique),
+          ].join(" | ")).map((cells) => `| ${cells} |`),
+        );
+      }
+      return parts.join("\n");
+    }),
+  ].join("\n");
+}
+
+function dbSchemaSqlPreview(tables: DbTable[]) {
+  if (tables.length === 0) return "";
+  const statements: string[] = [];
+  for (const table of tables) {
+    const tableName = quoteSqlIdentifier(table.name || "untitled_table");
+    if (table.columns.length === 0) {
+      statements.push(`CREATE TABLE ${tableName} (\n);\n`);
+      continue;
+    }
+
+    const columnDefinitions = table.columns.map((column) => `  ${dbColumnSql(column)}`);
+    statements.push(`CREATE TABLE ${tableName} (\n${columnDefinitions.join(",\n")}\n);`);
+
+    for (const column of table.columns) {
+      if (column.constraint === "INDEX" && column.field.trim()) {
+        statements.push(`CREATE INDEX ${quoteSqlIdentifier(`idx_${table.name || "untitled_table"}_${column.field}`)} ON ${tableName} USING btree (${quoteSqlIdentifier(column.field)});`);
+      }
+      if (column.constraint === "FOREIGN KEY" && column.field.trim()) {
+        statements.push(`-- TODO: Add foreign key for ${tableName}.${quoteSqlIdentifier(column.field)} REFERENCES table(column).`);
+      }
+      if (column.constraint === "CHECK" && column.field.trim()) {
+        statements.push(`-- TODO: Add CHECK constraint for ${tableName}.${quoteSqlIdentifier(column.field)}.`);
+      }
+      if (column.constraint === "DEFAULT" && column.field.trim()) {
+        statements.push(`-- TODO: Add DEFAULT value for ${tableName}.${quoteSqlIdentifier(column.field)}.`);
+      }
+      if (column.description.trim() && column.field.trim()) {
+        statements.push(`COMMENT ON COLUMN ${tableName}.${quoteSqlIdentifier(column.field)} IS ${sqlString(column.description)};`);
+      }
+    }
+
+    for (const index of table.indexes ?? []) {
+      const indexSql = createIndexSql(table, tableName, index);
+      if (indexSql) statements.push(indexSql);
+    }
+  }
+  return statements.join("\n\n");
+}
+
+function createIndexSql(table: DbTable, tableName: string, index: Pick<DbTable["indexes"][number], "name" | "columnIds" | "type" | "unique">) {
+  const columns = index.columnIds
+    .map((columnId) => table.columns.find((item) => item.id === columnId))
+    .filter((column) => column?.field.trim());
+  if (columns.length === 0) return "";
+  const indexName = index.name || `idx_${table.name || "untitled_table"}_${columns.map((column) => column?.field).join("_")}`;
+  const columnSql = columns.map((column) => quoteSqlIdentifier(column?.field ?? "")).join(", ");
+  return `CREATE ${index.unique === "YES" ? "UNIQUE " : ""}INDEX ${quoteSqlIdentifier(indexName)} ON ${tableName} USING ${index.type.toLowerCase()} (${columnSql});`;
+}
+
+function dbColumnSql(column: DbTable["columns"][number]) {
+  const parts = [
+    quoteSqlIdentifier(column.field || "unnamed_column"),
+    column.type.trim() || "text",
+  ];
+  if (column.nullable === "NO" && column.constraint !== "PRIMARY KEY") parts.push("NOT NULL");
+  if (column.constraint === "PRIMARY KEY" || column.constraint === "UNIQUE") parts.push(column.constraint);
+  return parts.join(" ");
+}
+
+function quoteSqlIdentifier(value: string) {
+  return `"${value.trim().replaceAll("\"", "\"\"") || "unnamed"}"`;
+}
+
+function sqlString(value: string) {
+  return `'${value.replaceAll("'", "''")}'`;
+}
+
 function projectOpenApi(project: Project) {
   return {
     openapi: "3.0.3",
@@ -925,6 +1208,7 @@ function projectOpenApi(project: Project) {
     paths: mergeProjectOpenApiPaths(project),
     "x-event-codes": project.event_code,
     "x-error-codes": project.error_code,
+    "x-db-schema": project.db_schema,
     "x-services": project.services.map((service) => ({
       id: service.id,
       name: service.name,
@@ -1067,7 +1351,7 @@ function validateProject(project: Project): Project {
   if (!project?.name || !Array.isArray(project.services) || !Array.isArray(project.event_code) || !Array.isArray(project.error_code)) {
     throw new Error("Invalid project");
   }
-  return project;
+  return { ...project, db_schema: Array.isArray(project.db_schema) ? project.db_schema : [] };
 }
 
 function cloneImportedProject(project: Project): Project {
@@ -1087,6 +1371,11 @@ function cloneImportedProject(project: Project): Project {
     name: project.name,
     event_code: project.event_code.map((eventCode) => ({ ...eventCode, id: uid() })),
     error_code: errorCode,
+    db_schema: project.db_schema.map((table) => ({
+      ...table,
+      id: uid(),
+      columns: table.columns.map((column) => ({ ...column, id: uid() })),
+    })),
     services: project.services.map((service) => ({
       ...service,
       id: uid(),

@@ -1,43 +1,55 @@
 import { ChevronDown, ChevronRight, Code2, Edit3, Folder, FolderOpen, Plus, Trash2 } from "lucide-react";
-import type { Project, Service } from "../domain";
+import type { DbTable, Project, Service } from "../domain";
 
-export type Page = "services" | "eventCodes" | "errorCodes";
+export type Page = "services" | "eventCodes" | "errorCodes" | "dbSchema";
 
 export function ProjectTree({
   projects,
   selectedProjectId,
   selectedServiceId,
+  selectedDbTableId,
   page,
   openProjects,
   openServices,
+  openDbSchemas,
   onToggleProject,
   onToggleServices,
+  onToggleDbSchema,
   onSelectProject,
   onSelectEventCodes,
   onSelectErrorCodes,
+  onSelectDbSchema,
+  onCreateDbTable,
   onSelectServices,
   onRenameProject,
   onArchiveProject,
   onCreateService,
   onSelectService,
+  onSelectDbTable,
   showProjectActions,
 }: {
   projects: Project[];
   selectedProjectId: string;
   selectedServiceId: string;
+  selectedDbTableId: string;
   page: Page;
   openProjects: Set<string>;
   openServices: Set<string>;
+  openDbSchemas: Set<string>;
   onToggleProject: (projectId: string) => void;
   onToggleServices: (projectId: string) => void;
+  onToggleDbSchema: (projectId: string) => void;
   onSelectProject: (project: Project) => void;
   onSelectEventCodes: (project: Project) => void;
   onSelectErrorCodes: (project: Project) => void;
+  onSelectDbSchema: (project: Project) => void;
+  onCreateDbTable: (project: Project) => void;
   onSelectServices: (project: Project) => void;
   onRenameProject: (project: Project) => void;
   onArchiveProject: (project: Project) => void;
   onCreateService: (project: Project) => void;
   onSelectService: (project: Project, service: Service) => void;
+  onSelectDbTable: (project: Project, table: DbTable) => void;
   showProjectActions: boolean;
 }) {
   return (
@@ -48,6 +60,7 @@ export function ProjectTree({
           const selected = project.id === selectedProjectId;
           const projectOpen = openProjects.has(project.id);
           const servicesOpen = openServices.has(project.id);
+          const dbSchemaOpen = openDbSchemas.has(project.id);
           return (
             <div className="tree-project" key={project.id}>
               <button
@@ -116,6 +129,51 @@ export function ProjectTree({
                     <span>ERROR</span>
                     <small>{project.error_code.length}</small>
                   </button>
+                  <button
+                    className={selected && page === "dbSchema" && !selectedDbTableId ? "tree-row branch-row active" : "tree-row branch-row"}
+                    type="button"
+                    onClick={() => {
+                      onToggleDbSchema(project.id);
+                      onSelectDbSchema(project);
+                    }}
+                  >
+                    {dbSchemaOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    {dbSchemaOpen ? <FolderOpen size={15} /> : <Folder size={15} />}
+                    <span>DB SCHEMA</span>
+                    <small>{project.db_schema.length}</small>
+                    {showProjectActions ? (
+                      <span
+                        className="tree-add"
+                        role="button"
+                        tabIndex={0}
+                        title="Create table"
+                        aria-label="Create table"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onCreateDbTable(project);
+                        }}
+                        onKeyDown={(event) => {
+                          if (event.key !== "Enter" && event.key !== " ") return;
+                          event.preventDefault();
+                          event.stopPropagation();
+                          onCreateDbTable(project);
+                        }}
+                      >
+                        <Plus size={13} />
+                      </span>
+                    ) : null}
+                  </button>
+                  {dbSchemaOpen && (
+                    <div className="tree-children nested">
+                      {project.db_schema.map((table) => (
+                        <button className={selected && page === "dbSchema" && table.id === selectedDbTableId ? "tree-row leaf-row active" : "tree-row leaf-row"} type="button" key={table.id} onClick={() => onSelectDbTable(project, table)}>
+                          <Code2 size={14} />
+                          <span>{table.name || "Untitled Table"}</span>
+                        </button>
+                      ))}
+                      {project.db_schema.length === 0 && <p className="empty tree-empty">No tables yet.</p>}
+                    </div>
+                  )}
                   <button
                     className={selected && page === "services" && !selectedServiceId ? "tree-row branch-row active" : "tree-row branch-row"}
                     type="button"

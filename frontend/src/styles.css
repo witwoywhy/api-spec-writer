@@ -373,6 +373,11 @@ textarea:focus {
   padding: 18px;
 }
 
+.workspace-preview {
+  background: var(--surface);
+  min-height: 100vh;
+}
+
 .workspace-header {
   display: flex;
   justify-content: space-between;
@@ -532,18 +537,48 @@ textarea:focus {
 }
 
 .preview-panel {
+  background: var(--surface);
   position: sticky;
   top: 18px;
   max-height: calc(100vh - 36px);
+  min-height: calc(100vh - 36px);
   display: grid;
   grid-template-rows: auto minmax(260px, 1fr);
   overflow: hidden;
 }
 
 .preview-only .preview-panel {
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   position: static;
   max-height: none;
-  min-height: calc(100vh - 112px);
+  min-height: calc(100vh - 84px);
+}
+
+.preview-export-frame {
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+}
+
+.preview-export-frame > .html-preview {
+  min-height: calc(100% - 32px);
+}
+
+.preview-panel > .markdown-preview,
+.preview-panel > .openapi-preview,
+.preview-panel > .preview-export-frame {
+  height: 100%;
+  min-height: 100%;
+}
+
+.code-preview {
+  display: flex;
+}
+
+.code-preview pre {
+  flex: 1;
 }
 
 .panel-title {
@@ -981,6 +1016,14 @@ label span {
   grid-template-columns: 0.45fr 0.7fr 1fr 1.25fr 1fr 1.25fr 36px;
 }
 
+.schema-row {
+  grid-template-columns: 28px 1fr 0.9fr 0.55fr 0.85fr 1.35fr 36px;
+}
+
+.schema-index-row {
+  grid-template-columns: 1fr 1.4fr 0.65fr 0.5fr 36px;
+}
+
 .field-row {
   grid-template-columns: 1fr 0.75fr 0.55fr 1.55fr 36px;
 }
@@ -1059,6 +1102,168 @@ label span {
 
 .code-group-title button {
   min-height: 32px;
+}
+
+.schema-table-title {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.schema-index-section {
+  border-top: 1px solid var(--line);
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+  padding-top: 12px;
+}
+
+.multi-select {
+  position: relative;
+}
+
+.multi-select-trigger {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--text);
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) 16px;
+  justify-content: stretch;
+  min-height: 38px;
+  padding: 8px 10px;
+  text-align: left;
+  width: 100%;
+}
+
+.multi-select-trigger span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.multi-select-options {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 12px 24px rgba(25, 38, 52, 0.16);
+  display: grid;
+  gap: 4px;
+  left: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 22;
+}
+
+.multi-select-options label {
+  align-items: center;
+  border-radius: 5px;
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+}
+
+.multi-select-options label:hover {
+  background: #eef3f8;
+}
+
+.multi-select-options input {
+  min-height: 0;
+  width: auto;
+}
+
+.multi-select-options span {
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.multi-select-empty {
+  color: var(--muted);
+  padding: 6px;
+}
+
+.drag-handle {
+  align-items: center;
+  color: var(--muted);
+  cursor: grab;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 34px;
+}
+
+.drag-handle:active {
+  cursor: grabbing;
+}
+
+.dragging {
+  opacity: 0.55;
+}
+
+.searchable-select {
+  position: relative;
+}
+
+.searchable-select input {
+  padding-right: 34px;
+  width: 100%;
+}
+
+.searchable-select > button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  min-height: 0;
+  padding: 0;
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+}
+
+.searchable-options {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  box-shadow: 0 12px 24px rgba(25, 38, 52, 0.16);
+  display: grid;
+  left: 0;
+  max-height: 220px;
+  overflow: auto;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 20;
+}
+
+.searchable-options button,
+.searchable-options span {
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  justify-content: flex-start;
+  min-height: 30px;
+  padding: 6px 8px;
+  text-align: left;
+}
+
+.searchable-options button:hover,
+.searchable-options button.active {
+  background: #eef3f8;
+}
+
+.searchable-options span {
+  color: var(--muted);
 }
 
 .domain-toggle {
@@ -1147,6 +1352,8 @@ label span {
   .two,
   .event-row,
   .error-row,
+  .schema-row,
+  .schema-index-row,
   .field-row,
   .mapping-row {
     grid-template-columns: 1fr;
