@@ -629,20 +629,50 @@ function CodeTextarea({
   value: string;
   onChangeValue: (value: string) => void;
 }) {
+  const [editorHeight, setEditorHeight] = useState(() => Number.parseInt(height, 10) || 260);
+  const [dragState, setDragState] = useState<{ startY: number; startHeight: number } | null>(null);
+
+  useEffect(() => {
+    if (!dragState) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const nextHeight = dragState.startHeight + event.clientY - dragState.startY;
+      setEditorHeight(Math.min(Math.max(nextHeight, 140), 900));
+    };
+    const onPointerUp = () => setDragState(null);
+
+    window.addEventListener("pointermove", onPointerMove);
+    window.addEventListener("pointerup", onPointerUp, { once: true });
+    return () => {
+      window.removeEventListener("pointermove", onPointerMove);
+      window.removeEventListener("pointerup", onPointerUp);
+    };
+  }, [dragState]);
+
   return (
-    <CodeMirror
-      className={`code-editor ${className}`.trim()}
-      value={value}
-      height={height}
-      basicSetup={{
-        foldGutter: false,
-        highlightActiveLine: true,
-        lineNumbers: true,
-      }}
-      extensions={extensions}
-      indentWithTab
-      onChange={onChangeValue}
-    />
+    <div className={`code-editor-frame ${className}`.trim()}>
+      <CodeMirror
+        className="code-editor"
+        value={value}
+        height={`${editorHeight}px`}
+        basicSetup={{
+          foldGutter: false,
+          highlightActiveLine: true,
+          lineNumbers: true,
+        }}
+        extensions={extensions}
+        indentWithTab
+        onChange={onChangeValue}
+      />
+      <div
+        aria-label="Resize editor"
+        className="code-editor-resize"
+        onPointerDown={(event) => {
+          event.preventDefault();
+          setDragState({ startY: event.clientY, startHeight: editorHeight });
+        }}
+        role="separator"
+      />
+    </div>
   );
 }
 

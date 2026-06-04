@@ -1069,13 +1069,13 @@ label span {
   grid-template-columns: minmax(92px, 0.25fr) minmax(0, 1fr) 36px auto 36px;
 }
 
-.code-editor {
+.code-editor-frame {
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
 }
 
-.code-editor:focus-within {
+.code-editor-frame:focus-within {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
 }
@@ -1087,6 +1087,22 @@ label span {
 
 .code-editor .cm-focused {
   outline: none;
+}
+
+.code-editor-resize {
+  background:
+    linear-gradient(90deg, transparent, #aebac5, transparent) center / 42px 1px no-repeat,
+    var(--surface-soft);
+  border-top: 1px solid var(--line);
+  cursor: ns-resize;
+  height: 10px;
+  touch-action: none;
+}
+
+.code-editor-resize:hover {
+  background:
+    linear-gradient(90deg, transparent, var(--accent), transparent) center / 42px 1px no-repeat,
+    #eef5f4;
 }
 
 .row {
