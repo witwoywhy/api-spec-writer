@@ -1,3 +1,7 @@
+import CodeMirror from "@uiw/react-codemirror";
+import { json } from "@codemirror/lang-json";
+import type { Extension } from "@codemirror/state";
+import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { ChevronDown, Edit3, Plus, Trash2 } from "lucide-react";
 import { type TextareaHTMLAttributes, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DbTable, ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
@@ -12,6 +16,15 @@ const METHODS: HttpMethod[] = ["GET", "POST", "PUT", "PATCH", "DELETE"];
 const SERVICE_TYPES: ServiceType[] = ["http", "publisher", "subscriber", "scheduler"];
 const REQUIRED: RequireFlag[] = ["YES", "NO"];
 const HTTP_STATUS_CODES = ["200", "201", "202", "204", "400", "401", "403", "404", "409", "422", "429", "500", "502", "503"];
+const INDENTATION_MARKERS = indentationMarkers({
+  colors: {
+    light: "#d7dee5",
+    activeLight: "#aebac5",
+  },
+  highlightActiveBlock: false,
+});
+const JSON_EDITOR_EXTENSIONS = [json(), INDENTATION_MARKERS];
+const TEXT_EDITOR_EXTENSIONS = [INDENTATION_MARKERS];
 
 export function ServiceEditor({
   spec,
@@ -91,7 +104,7 @@ export function ServiceEditor({
       </Fieldset>
 
       <Fieldset title="Sequence Diagram">
-        <Label text="Mermaid"><SmartTextarea className="tall" value={spec.sequence} onChangeValue={(value) => patch({ sequence: value })} /></Label>
+        <Label text="Mermaid"><CodeTextarea className="tall" value={spec.sequence} onChangeValue={(value) => patch({ sequence: value })} extensions={TEXT_EDITOR_EXTENSIONS} height="220px" /></Label>
       </Fieldset>
 
       <Fieldset title="Errors">
@@ -298,7 +311,7 @@ function FieldRows({
                     </button>
                   )}
                 </div>
-                <SmartTextarea value={exampleValue ?? ""} onChangeValue={onExampleChange} />
+                <CodeTextarea value={exampleValue ?? ""} onChangeValue={onExampleChange} />
               </div>
             )}
           </div>
@@ -414,7 +427,7 @@ function ExampleCases({
               <Trash2 size={16} />
             </button>
           </div>
-          <SmartTextarea value={selectedExample.value} onChangeValue={(value) => updateExample(selectedExample.id, { value })} />
+          <CodeTextarea value={selectedExample.value} onChangeValue={(value) => updateExample(selectedExample.id, { value })} />
         </div>
       ) : (
         <button
@@ -599,6 +612,36 @@ function SmartTextarea({
           insertText("\"");
         }
       }}
+    />
+  );
+}
+
+function CodeTextarea({
+  className = "",
+  extensions = JSON_EDITOR_EXTENSIONS,
+  height = "260px",
+  value,
+  onChangeValue,
+}: {
+  className?: string;
+  extensions?: Extension[];
+  height?: string;
+  value: string;
+  onChangeValue: (value: string) => void;
+}) {
+  return (
+    <CodeMirror
+      className={`code-editor ${className}`.trim()}
+      value={value}
+      height={height}
+      basicSetup={{
+        foldGutter: false,
+        highlightActiveLine: true,
+        lineNumbers: true,
+      }}
+      extensions={extensions}
+      indentWithTab
+      onChange={onChangeValue}
     />
   );
 }

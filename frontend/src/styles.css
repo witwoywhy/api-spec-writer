@@ -1069,6 +1069,26 @@ label span {
   grid-template-columns: minmax(92px, 0.25fr) minmax(0, 1fr) 36px auto 36px;
 }
 
+.code-editor {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.code-editor:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.12);
+}
+
+.code-editor .cm-editor {
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+}
+
+.code-editor .cm-focused {
+  outline: none;
+}
+
 .row {
   display: grid;
   gap: 8px;
