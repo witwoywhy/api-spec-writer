@@ -1080,7 +1080,35 @@ label span {
 }
 
 .error-row {
-  grid-template-columns: 0.45fr 0.7fr 1fr 1.25fr 1fr 1.25fr 36px;
+  grid-template-columns: 0.45fr 0.9fr minmax(0, 1.6fr) 36px;
+}
+
+.error-code-row {
+  grid-template-columns: 28px 0.45fr 0.7fr 1.1fr 1fr 1.25fr 1fr 1.25fr 36px;
+}
+
+.code-group,
+.row.error-code-row {
+  position: relative;
+}
+
+.code-group.drop-target,
+.row.error-code-row.drop-target {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.55);
+}
+
+.code-group.drop-target::before,
+.row.error-code-row.drop-target::before {
+  background: #14b8a6;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+  content: "";
+  height: 3px;
+  left: 8px;
+  position: absolute;
+  right: 8px;
+  top: -5px;
 }
 
 .schema-row {
@@ -1177,6 +1205,7 @@ label span {
   cursor: pointer;
   margin: -4px;
   padding: 4px;
+  position: relative;
 }
 
 .code-group-title:hover {
@@ -1294,6 +1323,16 @@ label span {
   display: inline-flex;
   justify-content: center;
   min-height: 34px;
+}
+
+.code-group-title .drag-handle {
+  bottom: 0;
+  left: 0;
+  min-height: 0;
+  opacity: 0;
+  position: absolute;
+  top: 0;
+  width: 10px;
 }
 
 .drag-handle:active {
@@ -1469,6 +1508,7 @@ label span {
   .two,
   .event-row,
   .error-row,
+  .error-code-row,
   .schema-row,
   .schema-index-row,
   .field-row,

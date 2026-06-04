@@ -810,15 +810,17 @@ function normalizeErrorCodeRow(errorCode: LegacyErrorCode & { projectId: string 
 }
 
 function normalizeErrorCode(errorCode: LegacyErrorCode): ErrorCode {
+  const hasGenericDescription = Object.prototype.hasOwnProperty.call(errorCode, "description");
   return {
     id: errorCode.id,
     errorCodeId: errorCode.errorCodeId,
     domain: errorCode.domain ?? "general",
     status: errorCode.status,
     code: errorCode.code,
+    description: errorCode.description ?? "",
     message_th: errorCode.message_th ?? "",
     description_th: errorCode.description_th ?? "",
     message_en: errorCode.message_en ?? errorCode.message ?? "",
-    description_en: errorCode.description_en ?? errorCode.description ?? "",
+    description_en: errorCode.description_en ?? (hasGenericDescription ? "" : errorCode.description ?? ""),
   };
 }

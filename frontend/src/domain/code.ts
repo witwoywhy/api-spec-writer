@@ -4,6 +4,7 @@ export type ErrorCode = {
   domain: string;
   status: string;
   code: string;
+  description: string;
   message_th: string;
   description_th: string;
   message_en: string;

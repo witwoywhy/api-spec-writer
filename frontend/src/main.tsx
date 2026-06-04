@@ -70,7 +70,8 @@ function App() {
   const selectedDbTable = selectedProject?.db_schema.find((table) => table.id === selectedDbTableId) ?? selectedProject?.db_schema[0];
   const shouldRenderServicePreview = page === "services" && viewMode !== "edit" && Boolean(selectedService);
   const shouldRenderDbSchemaPreview = page === "dbSchema" && viewMode !== "edit";
-  const isFullPreview = (page === "services" || page === "dbSchema") && viewMode === "preview";
+  const shouldRenderErrorCodesPreview = page === "errorCodes" && viewMode !== "edit";
+  const isFullPreview = (page === "services" || page === "dbSchema" || page === "errorCodes") && viewMode === "preview";
   const shouldBuildMarkdown = shouldRenderServicePreview && (markdownMode === "markdown" || markdownMode === "html");
   const markdown = useMemo(
     () => shouldBuildMarkdown && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
@@ -81,6 +82,11 @@ function App() {
     [selectedProject, shouldRenderDbSchemaPreview],
   );
   const dbSchemaPreviewMode = markdownMode === "html" || markdownMode === "sql" ? markdownMode : "markdown";
+  const errorCodesPreviewMarkdown = useMemo(
+    () => shouldRenderErrorCodesPreview && selectedProject ? errorCodesPreviewMarkdownForProject(selectedProject) : "",
+    [selectedProject, shouldRenderErrorCodesPreview],
+  );
+  const errorCodesPreviewMode = markdownMode === "html" ? "html" : "markdown";
   const dbSchemaSql = useMemo(
     () => shouldRenderDbSchemaPreview && selectedProject ? dbSchemaSqlPreview(selectedProject.db_schema) : "",
     [selectedProject, shouldRenderDbSchemaPreview],
@@ -260,7 +266,7 @@ function App() {
       serviceId: page === "services" ? (selectedService?.id ?? "") : "",
       dbTableId: page === "dbSchema" ? (selectedDbTable?.id ?? "") : "",
     });
-    const search = (page === "services" && selectedService) || page === "dbSchema" ? serviceSearchParams(viewMode) : "";
+    const search = (page === "services" && selectedService) || page === "dbSchema" || page === "errorCodes" ? serviceSearchParams(viewMode) : "";
     const url = `${path}${search}`;
     if (url !== `${window.location.pathname}${window.location.search}`) window.history.pushState(null, "", url);
   }, [page, selectedDbTable?.id, selectedProject?.id, selectedService, selectedService?.id, viewMode]);
@@ -319,7 +325,7 @@ function App() {
   const addErrorCode = async (domain = "general") => {
     if (!selectedProject) return;
     if (!await flushPendingProjectSave(selectedProject.id)) return;
-    await localStorageProjectStore.createErrorCode(selectedProject.id, { id: uid(), domain, status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" });
+    await localStorageProjectStore.createErrorCode(selectedProject.id, { id: uid(), domain, status: "", code: "", description: "", message_th: "", description_th: "", message_en: "", description_en: "" });
     await refreshStore();
   };
 
@@ -528,6 +534,16 @@ function App() {
     }
     downloadFile(`${dbSchemaBaseName}.md`, dbSchemaPreviewMarkdown, "text/markdown;charset=utf-8");
   };
+  const exportErrorCodesPreview = () => {
+    if (!selectedProject || !errorCodesPreviewMarkdown.trim()) return;
+    const errorCodesBaseName = `${safeFileName(selectedProject.name)}-error-codes`;
+    if (errorCodesPreviewMode === "html") {
+      const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(errorCodesPreviewMarkdown);
+      downloadFile(`${errorCodesBaseName}.html`, buildHtmlDocument(`${selectedProject.name} Error Codes`, html), "text/html;charset=utf-8");
+      return;
+    }
+    downloadFile(`${errorCodesBaseName}.md`, errorCodesPreviewMarkdown, "text/markdown;charset=utf-8");
+  };
   const exportProjectPreview = () => {
     if (!selectedProject) return;
     const projectBaseName = safeFileName(selectedProject.name);
@@ -700,7 +716,7 @@ function App() {
                   </div>
                 ) : null}
               </div>
-              {page === "services" || page === "dbSchema" ? (
+              {page === "services" || page === "dbSchema" || page === "errorCodes" ? (
                 <div className="view-mode-control" aria-label="View mode">
                   <button className={viewMode === "split" ? "active" : ""} type="button" title="Editor and preview" aria-label="Editor and preview" onClick={() => setViewMode("split")}>
                     <Columns2 size={15} />
@@ -870,14 +886,66 @@ function App() {
             )}
 
             {page === "errorCodes" && (
-              <ErrorCodesPage
-                rows={selectedProject.error_code}
-                onAddDomain={addErrorDomain}
-                onAddErrorCode={addErrorCode}
-                onChange={(errorCodes) => {
-                  applyProjectChange(selectedProject.id, (current) => replaceErrorCodesInStore(current, selectedProject.id, errorCodes));
-                }}
-              />
+              <div ref={serviceLayoutRef} className={serviceLayoutClass(viewMode)} style={splitLayoutStyle}>
+                {viewMode !== "preview" && (
+                  <section className="panel editor-panel">
+                    <ErrorCodesPage
+                      rows={selectedProject.error_code}
+                      onAddDomain={addErrorDomain}
+                      onAddErrorCode={addErrorCode}
+                      onChange={(errorCodes) => {
+                        applyProjectChange(selectedProject.id, (current) => replaceErrorCodesInStore(current, selectedProject.id, errorCodes));
+                      }}
+                    />
+                  </section>
+                )}
+
+                {viewMode === "split" ? (
+                  <div
+                    className="split-divider"
+                    role="separator"
+                    aria-label="Resize editor and preview"
+                    aria-orientation="vertical"
+                    tabIndex={0}
+                    onKeyDown={(event) => {
+                      if (event.key === "ArrowLeft") setEditorWidth((current) => Math.max(32, current - 4));
+                      if (event.key === "ArrowRight") setEditorWidth((current) => Math.min(72, current + 4));
+                    }}
+                    onPointerDown={(event) => {
+                      event.currentTarget.setPointerCapture(event.pointerId);
+                      resizeSplitPanels(event.clientX);
+                    }}
+                    onPointerMove={(event) => {
+                      if (!event.currentTarget.hasPointerCapture(event.pointerId)) return;
+                      resizeSplitPanels(event.clientX);
+                    }}
+                  />
+                ) : null}
+
+                {viewMode !== "edit" && (
+                  <section className="panel preview-panel">
+                    <div className="panel-title">
+                      <div className="preview-title">
+                        <h3>Preview</h3>
+                        <select className="preview-select" value={errorCodesPreviewMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
+                          <option value="markdown">Markdown</option>
+                          <option value="html">HTML</option>
+                        </select>
+                      </div>
+                      <div className="preview-actions">
+                        <button type="button" onClick={exportErrorCodesPreview}><Download size={16} /> Export</button>
+                      </div>
+                    </div>
+                    {errorCodesPreviewMode === "html" ? (
+                      <div ref={htmlExportRef} className="preview-export-frame">
+                        <HtmlPreview markdown={errorCodesPreviewMarkdown} />
+                      </div>
+                    ) : (
+                      <MarkdownPreview markdown={errorCodesPreviewMarkdown} />
+                    )}
+                  </section>
+                )}
+              </div>
             )}
 
           </>
@@ -1300,18 +1368,46 @@ function errorCodesMarkdown(project: Project) {
   if (project.error_code.length === 0) return "## Error Codes\n\nNo error codes.";
   return [
     "## Error Codes",
-    "| Domain | HTTP | Code | Message EN | Description EN | Message TH | Description TH |",
-    "|--------|------|------|------------|----------------|------------|----------------|",
+    "| Domain | HTTP | Code | Description | Message EN | Description EN | Message TH | Description TH |",
+    "|--------|------|------|-------------|------------|----------------|------------|----------------|",
     ...project.error_code.map((row) => [
       escapePipe(row.domain),
       escapePipe(row.status),
       escapePipe(row.code),
+      escapePipe(row.description),
       escapePipe(row.message_en),
       escapePipe(row.description_en),
       escapePipe(row.message_th),
       escapePipe(row.description_th),
     ].join(" | ")).map((cells) => `| ${cells} |`),
   ].join("\n");
+}
+
+function errorCodesPreviewMarkdownForProject(project: Project) {
+  if (project.error_code.length === 0) return "## Error Codes\n\nNo error codes.";
+  const groupsByDomain = new Map<string, ErrorCode[]>();
+  for (const row of project.error_code) {
+    const domain = row.domain || "general";
+    const groupRows = groupsByDomain.get(domain);
+    if (groupRows) groupRows.push(row);
+    else groupsByDomain.set(domain, [row]);
+  }
+  return [
+    "## Error Codes",
+    ...Array.from(groupsByDomain, ([domain, rows]) => [
+      `### ${escapeMarkdownHeading(domain)}`,
+      "| HTTP | Code | Message EN | Description EN | Message TH | Description TH |",
+      "|------|------|------------|----------------|------------|----------------|",
+      ...rows.map((row) => [
+        escapePipe(row.status),
+        escapePipe(row.code),
+        escapePipe(row.message_en),
+        escapePipe(row.description_en),
+        escapePipe(row.message_th),
+        escapePipe(row.description_th),
+      ].join(" | ")).map((cells) => `| ${cells} |`),
+    ].join("\n")),
+  ].join("\n\n");
 }
 
 function dbSchemaMarkdown(project: Project) {
@@ -1573,6 +1669,10 @@ function inlineMarkdown(value: string) {
 
 function escapePipe(value: string | number | undefined) {
   return String(value ?? "").replaceAll("|", "\\|").replaceAll("\n", " ");
+}
+
+function escapeMarkdownHeading(value: string) {
+  return value.replaceAll("\n", " ").replace(/^#+\s*/, "").trim() || "Untitled";
 }
 
 function escapeHtml(value: string) {

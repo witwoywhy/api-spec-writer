@@ -99,10 +99,7 @@ export function ServiceEditor({
           <div className="table-header error-row">
             <span>HTTP</span>
             <span>Code</span>
-            <span>Message EN</span>
-            <span>Description EN</span>
-            <span>Message TH</span>
-            <span>Description TH</span>
+            <span>Description</span>
             <span />
           </div>
         )}
@@ -130,7 +127,7 @@ export function ServiceEditor({
               ...current,
               errors: [
                 ...current.errors,
-                errorCode ? { ...errorCode, id: uid(), errorCodeId: errorCode.id } : { id: uid(), domain: "general", status: "", code: "", message_th: "", description_th: "", message_en: "", description_en: "" },
+                errorCode ? { ...errorCode, id: uid(), errorCodeId: errorCode.id } : { id: uid(), domain: "general", status: "", code: "", description: "", message_th: "", description_th: "", message_en: "", description_en: "" },
               ],
             }));
           }}
@@ -458,10 +455,7 @@ function ServiceErrorRow({
         placeholder={resolved.code || "Select error"}
         onChange={onSelect}
       />
-      <input value={resolved.message_en} placeholder="message" readOnly />
-      <input value={resolved.description_en} placeholder="when this happens" readOnly />
-      <input value={resolved.message_th} placeholder="ข้อความภาษาไทย" readOnly />
-      <input value={resolved.description_th} placeholder="รายละเอียดภาษาไทย" readOnly />
+      <input value={resolved.description} placeholder="description" readOnly />
       <IconButton label="Remove error" onClick={onRemove} />
     </div>
   );
@@ -529,7 +523,7 @@ function ErrorCodeSearchableSelect({
               }}
             >
               <strong>{option.code}</strong>
-              <small>{option.status}{option.message_en ? ` ${option.message_en}` : ""}</small>
+              <small>{option.description || "-"}</small>
             </button>
           ))}
           {filteredOptions.length === 0 && <span>No options</span>}

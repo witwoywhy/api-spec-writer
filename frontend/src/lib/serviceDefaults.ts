@@ -60,9 +60,10 @@ export function createDefaultErrorCodes(): ErrorCode[] {
     domain: "General",
     status: errorCode.status,
     code: errorCode.code,
+    description: errorCode.message,
     message_th: "",
     description_th: "",
-    message_en: errorCode.message,
+    message_en: "",
     description_en: "",
   }));
 }
@@ -91,8 +92,8 @@ export function createDefaultSpec(name = "Create Transaction"): ServiceSpec {
     ],
     sequence: "sequenceDiagram\n    participant request\n    participant service\n    participant db.transaction\n\n    request ->> service: POST /v1/transactions\n    service ->> db.transaction: insert transaction\n    db.transaction -->> service: response\n    service -->> request: response",
     errors: [
-      { id: uid(), domain: "general", status: "400", code: "040001", message_th: "", description_th: "", message_en: "invalid request", description_en: "Request validation fails" },
-      { id: uid(), domain: "general", status: "401", code: "040002", message_th: "", description_th: "", message_en: "unauthorized", description_en: "Token is missing or invalid" },
+      { id: uid(), domain: "general", status: "400", code: "040001", description: "", message_th: "", description_th: "", message_en: "invalid request", description_en: "Request validation fails" },
+      { id: uid(), domain: "general", status: "401", code: "040002", description: "", message_th: "", description_th: "", message_en: "unauthorized", description_en: "Token is missing or invalid" },
     ],
     responseExample: '{\n  "transaction_id": "a7d5e8ac-3d7c-4a9e-95c1-9129998a7c10"\n}',
     responseExamples: [
