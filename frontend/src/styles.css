@@ -1119,6 +1119,32 @@ label span {
   grid-template-columns: 0.45fr 0.9fr minmax(0, 1.6fr) 36px;
 }
 
+.row.service-error-row {
+  cursor: grab;
+  position: relative;
+}
+
+.row.service-error-row:active {
+  cursor: grabbing;
+}
+
+.row.service-error-row.drop-target {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.55);
+}
+
+.row.service-error-row.drop-target::before {
+  background: #14b8a6;
+  border-radius: 999px;
+  box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.14);
+  content: "";
+  height: 3px;
+  left: 8px;
+  position: absolute;
+  right: 8px;
+  top: -5px;
+}
+
 .error-code-row {
   grid-template-columns: 28px 0.45fr 0.7fr 1.1fr 1fr 1.25fr 1fr 1.25fr 36px;
 }

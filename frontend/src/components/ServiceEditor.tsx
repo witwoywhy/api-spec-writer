@@ -3,7 +3,7 @@ import { json } from "@codemirror/lang-json";
 import type { Extension } from "@codemirror/state";
 import { indentationMarkers } from "@replit/codemirror-indentation-markers";
 import { ChevronDown, Edit3, Plus, Trash2 } from "lucide-react";
-import { type TextareaHTMLAttributes, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type DragEvent, type TextareaHTMLAttributes, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DbTable, ErrorCode, ExampleCase, FieldRow, HttpMethod, MappingSection, RequestLocation, RequireFlag, ResponseLocation, ServiceSpec, ServiceType } from "../domain";
 import { uid } from "../lib/id";
 import { parseJsonFields } from "../lib/jsonFieldParser";
@@ -38,6 +38,8 @@ export function ServiceEditor({
   onChange: (updater: (spec: ServiceSpec) => ServiceSpec) => void;
 }) {
   const serviceType = spec.type ?? "http";
+  const [draggedErrorId, setDraggedErrorId] = useState("");
+  const [dropErrorId, setDropErrorId] = useState("");
   const patch = (partial: Partial<ServiceSpec>) => onChange((current) => ({ ...current, ...partial }));
   const addField = (key: "requestFields" | "responseFields", location: RequestLocation | ResponseLocation) => {
     onChange((current) => ({
@@ -50,6 +52,14 @@ export function ServiceEditor({
   };
   const removeField = (key: "requestFields" | "responseFields", id: string) => {
     onChange((current) => ({ ...current, [key]: current[key].filter((row) => row.id !== id) }));
+  };
+  const clearErrorDrag = () => {
+    setDraggedErrorId("");
+    setDropErrorId("");
+  };
+  const moveError = (sourceId: string, targetId: string) => {
+    if (!sourceId || sourceId === targetId) return;
+    onChange((current) => ({ ...current, errors: moveById(current.errors, sourceId, targetId) }));
   };
 
   return (
@@ -120,7 +130,27 @@ export function ServiceEditor({
           <ServiceErrorRow
             key={row.id}
             row={row}
+            className={serviceErrorRowClass(row.id, draggedErrorId, dropErrorId)}
             projectErrorCodes={projectErrorCodes}
+            onDragEnd={clearErrorDrag}
+            onDragLeave={() => {
+              if (dropErrorId === row.id) setDropErrorId("");
+            }}
+            onDragOver={(event) => {
+              if (!draggedErrorId || draggedErrorId === row.id) return;
+              event.preventDefault();
+              setDropErrorId(row.id);
+            }}
+            onDragStart={(event) => {
+              setDraggedErrorId(row.id);
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", row.id);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              moveError(event.dataTransfer.getData("text/plain") || draggedErrorId, row.id);
+              clearErrorDrag();
+            }}
             onSelect={(errorCodeId) => {
               const selected = projectErrorCodes.find((errorCode) => errorCode.id === errorCodeId);
               if (!selected) return;
@@ -175,6 +205,23 @@ export function ServiceEditor({
       <MappingEditor sections={spec.mappingSections} dbSchema={projectDbSchema} onChange={(mappingSections) => patch({ mappingSections })} />
     </>
   );
+}
+
+function moveById<T extends { id: string }>(items: T[], sourceId: string, targetId: string) {
+  const sourceIndex = items.findIndex((item) => item.id === sourceId);
+  const targetIndex = items.findIndex((item) => item.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) return items;
+  const next = [...items];
+  const [source] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, source);
+  return next;
+}
+
+function serviceErrorRowClass(id: string, draggedId: string, dropId: string) {
+  const classes = ["row", "error-row", "service-error-row"];
+  if (draggedId === id) classes.push("dragging");
+  if (dropId === id) classes.push("drop-target");
+  return classes.join(" ");
 }
 
 function FieldRows({
@@ -446,13 +493,25 @@ function ExampleCases({
 }
 
 function ServiceErrorRow({
+  className,
   row,
   projectErrorCodes,
+  onDragEnd,
+  onDragLeave,
+  onDragOver,
+  onDragStart,
+  onDrop,
   onSelect,
   onRemove,
 }: {
+  className: string;
   row: ErrorCode;
   projectErrorCodes: ErrorCode[];
+  onDragEnd: () => void;
+  onDragLeave: () => void;
+  onDragOver: (event: DragEvent<HTMLDivElement>) => void;
+  onDragStart: (event: DragEvent<HTMLDivElement>) => void;
+  onDrop: (event: DragEvent<HTMLDivElement>) => void;
   onSelect: (errorCodeId: string) => void;
   onRemove: () => void;
 }) {
@@ -460,7 +519,16 @@ function ServiceErrorRow({
   const resolved = selectedErrorCode ?? row;
 
   return (
-    <div className="row error-row">
+    <div
+      className={className}
+      draggable
+      onDragEnd={onDragEnd}
+      onDragLeave={onDragLeave}
+      onDragOver={onDragOver}
+      onDragStart={onDragStart}
+      onDrop={onDrop}
+      title="Drag to reorder error"
+    >
       <input value={resolved.status} placeholder="HTTP" readOnly />
       <ErrorCodeSearchableSelect
         value={selectedErrorCode?.id ?? ""}
