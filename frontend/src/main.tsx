@@ -75,7 +75,8 @@ function App() {
   const shouldRenderDbSchemaPreview = page === "dbSchema" && viewMode !== "edit";
   const shouldRenderErrorCodesPreview = page === "errorCodes" && viewMode !== "edit";
   const isFullPreview = (page === "services" || page === "dbSchema" || page === "errorCodes") && viewMode === "preview";
-  const shouldBuildMarkdown = shouldRenderServicePreview && (markdownMode === "markdown" || markdownMode === "html");
+  const servicePreviewMode = markdownMode === "sql" ? "markdown" : markdownMode;
+  const shouldBuildMarkdown = shouldRenderServicePreview && (servicePreviewMode === "markdown" || servicePreviewMode === "html");
   const markdown = useMemo(
     () => shouldBuildMarkdown && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
     [selectedProject?.error_code, selectedService, shouldBuildMarkdown],
@@ -95,16 +96,16 @@ function App() {
     [selectedProject, shouldRenderDbSchemaPreview],
   );
   const openApiDocument = useMemo(
-    () => shouldRenderServicePreview && markdownMode === "openapi" && selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
-    [markdownMode, selectedProject?.error_code, selectedService, shouldRenderServicePreview],
+    () => shouldRenderServicePreview && servicePreviewMode === "openapi" && selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
+    [servicePreviewMode, selectedProject?.error_code, selectedService, shouldRenderServicePreview],
   );
   const openApiJson = useMemo(
     () => openApiDocument ? JSON.stringify(openApiDocument, null, 2) : "",
     [openApiDocument],
   );
   const goStruct = useMemo(
-    () => shouldRenderServicePreview && markdownMode === "gostruct" && selectedService ? serviceGoStruct(selectedService.spec) : "",
-    [markdownMode, selectedService, shouldRenderServicePreview],
+    () => shouldRenderServicePreview && servicePreviewMode === "gostruct" && selectedService ? serviceGoStruct(selectedService.spec) : "",
+    [servicePreviewMode, selectedService, shouldRenderServicePreview],
   );
 
   const clearProjectSaveTimer = useCallback((projectId: string) => {
@@ -511,9 +512,9 @@ function App() {
     downloadFile(`${exportBaseName}.html`, buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html), "text/html;charset=utf-8");
   };
   const servicePreviewRawContent = () => {
-    if (markdownMode === "openapi") return openApiJson;
-    if (markdownMode === "gostruct") return goStruct;
-    if (markdownMode === "html") {
+    if (servicePreviewMode === "openapi") return openApiJson;
+    if (servicePreviewMode === "gostruct") return goStruct;
+    if (servicePreviewMode === "html") {
       if (!markdown.trim()) return "";
       const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(markdown);
       return buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html);
@@ -555,17 +556,17 @@ function App() {
     }
   };
   const exportSelectedPreview = () => {
-    if (markdownMode === "openapi") {
+    if (servicePreviewMode === "openapi") {
       if (!openApiJson.trim()) return;
       downloadFile(`${exportBaseName}.openapi.json`, openApiJson, "application/json;charset=utf-8");
       return;
     }
-    if (markdownMode === "gostruct") {
+    if (servicePreviewMode === "gostruct") {
       if (!goStruct.trim()) return;
       downloadFile(`${exportBaseName}.go`, goStruct, "text/plain;charset=utf-8");
       return;
     }
-    if (markdownMode === "html") {
+    if (servicePreviewMode === "html") {
       exportHtml();
       return;
     }
@@ -834,7 +835,7 @@ function App() {
                     <div className="panel-title">
                       <div className="preview-title">
                         <h3>Preview</h3>
-                        <select className="preview-select" value={markdownMode === "sql" ? "markdown" : markdownMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
+                        <select className="preview-select" value={servicePreviewMode} onChange={(event) => setMarkdownMode(event.target.value as MarkdownMode)} aria-label="Preview type">
                           <option value="markdown">Markdown</option>
                           <option value="html">HTML</option>
                           <option value="openapi">OpenAPI</option>
@@ -846,15 +847,15 @@ function App() {
                         <button type="button" onClick={exportSelectedPreview}><Download size={16} /> Export</button>
                       </div>
                     </div>
-                    {markdownMode === "markdown" ? (
+                    {servicePreviewMode === "markdown" ? (
                       <MarkdownPreview markdown={markdown} />
-                    ) : markdownMode === "html" ? (
+                    ) : servicePreviewMode === "html" ? (
                       <div ref={htmlExportRef} className="preview-export-frame">
                         <HtmlPreview markdown={markdown} />
                       </div>
-                    ) : markdownMode === "openapi" ? (
+                    ) : servicePreviewMode === "openapi" ? (
                       <OpenApiPreview document={openApiDocument} />
-                    ) : markdownMode === "gostruct" ? (
+                    ) : servicePreviewMode === "gostruct" ? (
                       <GoStructPreview content={goStruct} />
                     ) : (
                       <MarkdownPreview markdown={markdown} />
