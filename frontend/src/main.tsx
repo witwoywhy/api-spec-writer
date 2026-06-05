@@ -1,6 +1,6 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Braces, Columns2, Download, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
+import { Braces, Clipboard, Columns2, Download, FilePlus2, FolderPlus, PanelLeftClose, PanelRightClose, Trash2, Upload } from "lucide-react";
 import { localStorageProjectStore, registerProjectFileHandle, type ProjectFileHandle } from "./adaptors/projectStore";
 import { ErrorCodesPage, EventCodesPage } from "./components/CodePages";
 import { DbSchemaPage } from "./components/DbSchemaPage";
@@ -55,12 +55,14 @@ function App() {
   const [markdownMode, setMarkdownMode] = useState<MarkdownMode>(initialMarkdownMode);
   const [editorWidth, setEditorWidth] = useState(58);
   const [saveError, setSaveError] = useState("");
+  const [copiedPreview, setCopiedPreview] = useState("");
   const [openProjects, setOpenProjects] = useState<Set<string>>(() => new Set());
   const [openServices, setOpenServices] = useState<Set<string>>(() => new Set());
   const [openServiceFolders, setOpenServiceFolders] = useState<Set<string>>(() => new Set());
   const [openDbSchemas, setOpenDbSchemas] = useState<Set<string>>(() => new Set());
   const serviceLayoutRef = useRef<HTMLDivElement>(null);
   const htmlExportRef = useRef<HTMLDivElement>(null);
+  const copiedPreviewTimerRef = useRef<number | null>(null);
   const latestStoreRef = useRef(store);
   const projectSaveTimersRef = useRef<Map<string, number>>(new Map());
   const pendingProjectSnapshotsRef = useRef<Map<string, Project>>(new Map());
@@ -244,6 +246,12 @@ function App() {
   useEffect(() => {
     localStorage.setItem(PREVIEW_TYPE_STORAGE_KEY, markdownMode);
   }, [markdownMode]);
+
+  useEffect(() => {
+    return () => {
+      if (copiedPreviewTimerRef.current) window.clearTimeout(copiedPreviewTimerRef.current);
+    };
+  }, []);
 
   useEffect(() => {
     const onPopState = () => {
@@ -501,6 +509,50 @@ function App() {
     if (!markdown.trim()) return;
     const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(markdown);
     downloadFile(`${exportBaseName}.html`, buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html), "text/html;charset=utf-8");
+  };
+  const servicePreviewRawContent = () => {
+    if (markdownMode === "openapi") return openApiJson;
+    if (markdownMode === "gostruct") return goStruct;
+    if (markdownMode === "html") {
+      if (!markdown.trim()) return "";
+      const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(markdown);
+      return buildHtmlDocument(selectedService?.spec.name ?? "API Spec", html);
+    }
+    return markdown;
+  };
+  const dbSchemaPreviewRawContent = () => {
+    if (!selectedProject) return "";
+    if (dbSchemaPreviewMode === "sql") return dbSchemaSql;
+    if (dbSchemaPreviewMode === "html") {
+      if (!dbSchemaPreviewMarkdown.trim()) return "";
+      const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(dbSchemaPreviewMarkdown);
+      return buildHtmlDocument(`${selectedProject.name} DB Schema`, html);
+    }
+    return dbSchemaPreviewMarkdown;
+  };
+  const errorCodesPreviewRawContent = () => {
+    if (!selectedProject) return "";
+    if (errorCodesPreviewMode === "html") {
+      if (!errorCodesPreviewMarkdown.trim()) return "";
+      const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(errorCodesPreviewMarkdown);
+      return buildHtmlDocument(`${selectedProject.name} Error Codes`, html);
+    }
+    return errorCodesPreviewMarkdown;
+  };
+  const showCopiedPreview = (target: string) => {
+    setCopiedPreview(target);
+    if (copiedPreviewTimerRef.current) window.clearTimeout(copiedPreviewTimerRef.current);
+    copiedPreviewTimerRef.current = window.setTimeout(() => setCopiedPreview(""), 1400);
+  };
+  const copyPreviewRaw = async (target: string, content: string) => {
+    if (!content.trim()) return;
+    try {
+      await copyTextToClipboard(content);
+      showCopiedPreview(target);
+    } catch (reason) {
+      console.error("Unable to copy preview", reason);
+      window.alert("Unable to copy preview.");
+    }
   };
   const exportSelectedPreview = () => {
     if (markdownMode === "openapi") {
@@ -790,6 +842,7 @@ function App() {
                         </select>
                       </div>
                       <div className="preview-actions">
+                        <button type="button" onClick={() => void copyPreviewRaw("service", servicePreviewRawContent())}><Clipboard size={16} /> {copiedPreview === "service" ? "Copied" : "Copy"}</button>
                         <button type="button" onClick={exportSelectedPreview}><Download size={16} /> Export</button>
                       </div>
                     </div>
@@ -859,6 +912,7 @@ function App() {
                         </select>
                       </div>
                       <div className="preview-actions">
+                        <button type="button" onClick={() => void copyPreviewRaw("dbSchema", dbSchemaPreviewRawContent())}><Clipboard size={16} /> {copiedPreview === "dbSchema" ? "Copied" : "Copy"}</button>
                         <button type="button" onClick={exportDbSchemaPreview}><Download size={16} /> Export</button>
                       </div>
                     </div>
@@ -934,6 +988,7 @@ function App() {
                         </select>
                       </div>
                       <div className="preview-actions">
+                        <button type="button" onClick={() => void copyPreviewRaw("errorCodes", errorCodesPreviewRawContent())}><Clipboard size={16} /> {copiedPreview === "errorCodes" ? "Copied" : "Copy"}</button>
                         <button type="button" onClick={exportErrorCodesPreview}><Download size={16} /> Export</button>
                       </div>
                     </div>
@@ -1260,6 +1315,22 @@ function downloadFile(fileName: string, content: string, type: string) {
   anchor.download = fileName;
   anchor.click();
   URL.revokeObjectURL(url);
+}
+
+async function copyTextToClipboard(content: string) {
+  if (navigator.clipboard?.writeText) {
+    await navigator.clipboard.writeText(content);
+    return;
+  }
+  const textarea = document.createElement("textarea");
+  textarea.value = content;
+  textarea.setAttribute("readonly", "");
+  textarea.style.position = "fixed";
+  textarea.style.left = "-9999px";
+  document.body.append(textarea);
+  textarea.select();
+  document.execCommand("copy");
+  textarea.remove();
 }
 
 async function saveProjectFile(project: Project) {
