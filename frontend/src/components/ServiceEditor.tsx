@@ -746,6 +746,14 @@ function CodeTextarea({
 
 function MappingEditor({ sections, dbSchema, onChange }: { sections: MappingSection[]; dbSchema: DbTable[]; onChange: (sections: MappingSection[]) => void }) {
   const tableNames = useMemo(() => dbSchema.map((table) => table.name.trim()).filter(Boolean), [dbSchema]);
+  const updateSectionName = (sectionId: string, name: string) => {
+    const selectedTable = dbSchema.find((table) => table.name.trim() === name.trim());
+    onChange(sections.map((section) => {
+      if (section.id !== sectionId) return section;
+      if (!selectedTable || section.rows.length > 0) return { ...section, name };
+      return { ...section, name, rows: mappingRowsFromTable(selectedTable) };
+    }));
+  };
   return (
     <Fieldset title="Field to Field Mapping">
       <button type="button" onClick={() => onChange([...sections, { id: uid(), name: "", rows: [] }])}><Plus size={16} /> Add Mapping Section</button>
@@ -755,7 +763,7 @@ function MappingEditor({ sections, dbSchema, onChange }: { sections: MappingSect
             <MappingSectionNameSelect
               value={section.name}
               options={tableNames}
-              onChange={(name) => onChange(sections.map((item) => item.id === section.id ? { ...item, name } : item))}
+              onChange={(name) => updateSectionName(section.id, name)}
             />
             <IconButton label="Remove mapping section" onClick={() => onChange(sections.filter((item) => item.id !== section.id))} />
           </div>
@@ -780,6 +788,13 @@ function MappingEditor({ sections, dbSchema, onChange }: { sections: MappingSect
       ))}
     </Fieldset>
   );
+}
+
+function mappingRowsFromTable(table: DbTable) {
+  return table.columns
+    .map((column) => column.field.trim())
+    .filter(Boolean)
+    .map((target) => ({ id: uid(), target, from: "", description: "" }));
 }
 
 function MappingSectionNameSelect({ value, options, onChange }: { value: string; options: string[]; onChange: (value: string) => void }) {
