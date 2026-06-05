@@ -40,6 +40,7 @@ const now = () => new Date().toISOString();
 const PREVIEW_TYPE_STORAGE_KEY = "api-spec-writer-platform:preview-type";
 const PROJECT_DRAFT_STORAGE_PREFIX = "api-spec-writer-platform:project-draft:v1:";
 const GENERAL_SERVICE_FOLDER_ID = "__general_services__";
+const SQL_INDENT = "    ";
 const initialRoute = parseAppRoute(window.location.pathname);
 const initialViewMode = parseViewMode(new URLSearchParams(window.location.search));
 const initialMarkdownMode = parseMarkdownMode(new URLSearchParams(window.location.search), localStorage.getItem(PREVIEW_TYPE_STORAGE_KEY));
@@ -1505,7 +1506,7 @@ function dbColumnSqlRows(columns: DbTable["columns"]) {
   const types = columns.map((column) => column.type.trim() || "TEXT");
   const nameWidth = Math.max(...names.map((name) => name.length));
   const typeWidth = Math.max(...types.map((type) => type.length));
-  return columns.map((column, index) => `  ${dbColumnSql(column, names[index], types[index], nameWidth, typeWidth)}`);
+  return columns.map((column, index) => `${SQL_INDENT}${dbColumnSql(column, names[index], types[index], nameWidth, typeWidth)}`);
 }
 
 function dbColumnSql(column: DbTable["columns"][number], name: string, type: string, nameWidth: number, typeWidth: number) {
