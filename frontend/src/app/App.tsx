@@ -82,9 +82,12 @@ export function App() {
                   <DbSchemaPreviewPanel
                     copied={controller.copiedPreview === "dbSchema"}
                     htmlExportRef={controller.htmlExportRef}
+                    goStruct={controller.dbSchemaGoStruct}
+                    goStructByTable={controller.dbSchemaGoStructByTable}
                     markdown={controller.dbSchemaPreviewMarkdown}
                     mode={controller.dbSchemaPreviewMode}
                     sql={controller.dbSchemaSql}
+                    sqlByTable={controller.dbSchemaSqlByTable}
                     onModeChange={controller.setMarkdownMode}
                     onCopy={() => void controller.copyDbSchemaPreviewRaw()}
                     onExport={controller.exportDbSchemaPreview}

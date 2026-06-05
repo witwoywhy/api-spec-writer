@@ -45,13 +45,17 @@ export function dbSchemaMarkdown(project: Project) {
 }
 
 export function dbSchemaSqlPreview(tables: DbTable[]) {
-  if (tables.length === 0) return "";
-  const statements: string[] = [];
-  for (const table of tables) {
+  return dbSchemaSqlPreviewByTable(tables).map((section) => section.content).join("\n\n");
+}
+
+export function dbSchemaSqlPreviewByTable(tables: DbTable[]) {
+  if (tables.length === 0) return [];
+  return tables.map((table) => {
     const tableName = quoteSqlIdentifier(table.name || "untitled_table");
+    const statements: string[] = [];
     if (table.columns.length === 0) {
       statements.push(`CREATE TABLE ${tableName} (\n);\n`);
-      continue;
+      return { tableId: table.id, tableName: table.name || "Untitled Table", content: statements.join("\n\n") };
     }
 
     const columnDefinitions = dbColumnSqlRows(table.columns);
@@ -79,8 +83,46 @@ export function dbSchemaSqlPreview(tables: DbTable[]) {
       const indexSql = createIndexSql(table, tableName, index);
       if (indexSql) statements.push(indexSql);
     }
-  }
-  return statements.join("\n\n");
+    return { tableId: table.id, tableName: table.name || "Untitled Table", content: statements.join("\n\n") };
+  });
+}
+
+export function dbSchemaGoStructPreview(tables: DbTable[]) {
+  const sections = dbSchemaGoStructPreviewByTable(tables);
+  const needsTime = sections.some((section) => section.needsTime);
+  const content = sections.map((section) => section.content).filter(Boolean).join("\n\n");
+  if (!content) return "";
+  return needsTime ? `import "time"\n\n${content}` : content;
+}
+
+export function dbSchemaGoStructPreviewByTable(tables: DbTable[]) {
+  return tables.map((table) => {
+    const fields = table.columns
+      .filter((column) => column.field.trim())
+      .map((column) => {
+        const goType = dbColumnGoType(column.type);
+        const nullableType = column.nullable === "YES" && !goType.startsWith("[]") ? `*${goType}` : goType;
+        return {
+          fieldName: goFieldName(column.field),
+          type: nullableType,
+          tag: `\`gorm:"column:${column.field}"\``,
+          needsTime: goType === "time.Time",
+        };
+      });
+    if (fields.length === 0) {
+      return { tableId: table.id, tableName: table.name || "Untitled Table", content: "", needsTime: false };
+    }
+    return {
+      tableId: table.id,
+      tableName: table.name || "Untitled Table",
+      content: [
+        `type ${goFieldName(table.name || "UntitledTable")} struct {`,
+        ...goStructFieldLines(fields),
+        "}",
+      ].join("\n"),
+      needsTime: fields.some((field) => field.needsTime),
+    };
+  });
 }
 
 function createIndexSql(table: DbTable, tableName: string, index: Pick<DbTable["indexes"][number], "name" | "columnIds" | "type" | "unique">) {
@@ -110,10 +152,42 @@ function dbColumnSql(column: DbTable["columns"][number], name: string, type: str
   return parts.join(" ");
 }
 
+function goStructFieldLines(fields: Array<{ fieldName: string; type: string; tag: string }>) {
+  const fieldWidth = Math.max(...fields.map((field) => field.fieldName.length));
+  const typeWidth = Math.max(...fields.map((field) => field.type.length));
+  return fields.map((field) => `${SQL_INDENT}${field.fieldName.padEnd(fieldWidth)} ${field.type.padEnd(typeWidth)} ${field.tag}`);
+}
+
 function quoteSqlIdentifier(value: string) {
   return `"${value.trim().replaceAll("\"", "\"\"") || "unnamed"}"`;
 }
 
 function sqlString(value: string) {
   return `'${value.replaceAll("'", "''")}'`;
+}
+
+function dbColumnGoType(type: string) {
+  const normalized = type.toUpperCase().trim();
+  if (normalized.includes("[]") || normalized.endsWith(" ARRAY")) return "[]string";
+  if (normalized.includes("BIGINT") || normalized.includes("BIGSERIAL")) return "int64";
+  if (normalized.includes("SMALLINT")) return "int16";
+  if (normalized.includes("INT") || normalized.includes("SERIAL")) return "int";
+  if (normalized.includes("NUMERIC") || normalized.includes("DECIMAL") || normalized.includes("DOUBLE") || normalized.includes("REAL") || normalized.includes("MONEY")) return "float64";
+  if (normalized.includes("BOOL")) return "bool";
+  if (normalized.includes("JSON")) return "map[string]any";
+  if (normalized.includes("TIMESTAMP") || normalized === "DATE" || normalized.startsWith("TIME")) return "time.Time";
+  if (normalized.includes("BYTEA")) return "[]byte";
+  return "string";
+}
+
+function goFieldName(value: string) {
+  const words = value
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .split(/[^a-zA-Z0-9]+/)
+    .filter(Boolean);
+  const name = words.map((word) => {
+    if (word.toLowerCase() === "id") return "ID";
+    return `${word.charAt(0).toUpperCase()}${word.slice(1).toLowerCase()}`;
+  }).join("");
+  return /^[0-9]/.test(name) ? `Field${name}` : name || "Field";
 }

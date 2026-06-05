@@ -3,7 +3,7 @@ import { localStorageProjectStore, registerProjectFileHandle } from "../adaptors
 import type { Page } from "../components/ProjectTree";
 import type { DbTable, ErrorCode, EventCode, Project, Service, ServiceFolder, ServiceSpec, StoreDocument } from "../domain";
 import { copyTextToClipboard, downloadFile, safeFileName } from "../features/preview/exportActions";
-import { dbSchemaMarkdown, dbSchemaSqlPreview } from "../features/preview/dbSchemaPreview";
+import { dbSchemaGoStructPreview, dbSchemaGoStructPreviewByTable, dbSchemaMarkdown, dbSchemaSqlPreview, dbSchemaSqlPreviewByTable } from "../features/preview/dbSchemaPreview";
 import { buildHtmlDocument, markdownToHtml } from "../features/preview/markdownHtml";
 import { errorCodesPreviewMarkdownForProject, projectOpenApi, projectSpecMarkdown } from "../features/preview/projectPreview";
 import { buildAppPath, parseAppRoute } from "../lib/appRouter";
@@ -69,24 +69,40 @@ export function useWorkspaceController() {
   const shouldRenderErrorCodesPreview = page === "errorCodes" && viewMode !== "edit";
   const isFullPreview = (page === "services" || page === "dbSchema" || page === "errorCodes") && viewMode === "preview";
   const servicePreviewMode = normalizeServicePreviewMode(markdownMode);
+  const previewDbTables = useMemo(
+    () => shouldRenderDbSchemaPreview && selectedDbTable ? [selectedDbTable] : [],
+    [selectedDbTable, shouldRenderDbSchemaPreview],
+  );
   const shouldBuildMarkdown = shouldRenderServicePreview && (servicePreviewMode === "markdown" || servicePreviewMode === "html");
   const markdown = useMemo(
     () => shouldBuildMarkdown && selectedService ? serviceMarkdown(selectedService.spec, selectedProject?.error_code ?? []) : "",
     [selectedProject?.error_code, selectedService, shouldBuildMarkdown],
   );
   const dbSchemaPreviewMarkdown = useMemo(
-    () => shouldRenderDbSchemaPreview && selectedProject ? dbSchemaMarkdown(selectedProject) : "",
-    [selectedProject, shouldRenderDbSchemaPreview],
+    () => shouldRenderDbSchemaPreview && selectedProject ? dbSchemaMarkdown({ ...selectedProject, db_schema: previewDbTables }) : "",
+    [previewDbTables, selectedProject, shouldRenderDbSchemaPreview],
   );
-  const dbSchemaPreviewMode: MarkdownMode = markdownMode === "html" || markdownMode === "sql" ? markdownMode : "markdown";
+  const dbSchemaPreviewMode: MarkdownMode = markdownMode === "html" || markdownMode === "sql" || markdownMode === "gostruct" ? markdownMode : "markdown";
   const errorCodesPreviewMarkdown = useMemo(
     () => shouldRenderErrorCodesPreview && selectedProject ? errorCodesPreviewMarkdownForProject(selectedProject) : "",
     [selectedProject, shouldRenderErrorCodesPreview],
   );
   const errorCodesPreviewMode: MarkdownMode = markdownMode === "html" ? "html" : "markdown";
   const dbSchemaSql = useMemo(
-    () => shouldRenderDbSchemaPreview && selectedProject ? dbSchemaSqlPreview(selectedProject.db_schema) : "",
-    [selectedProject, shouldRenderDbSchemaPreview],
+    () => shouldRenderDbSchemaPreview ? dbSchemaSqlPreview(previewDbTables) : "",
+    [previewDbTables, shouldRenderDbSchemaPreview],
+  );
+  const dbSchemaSqlByTable = useMemo(
+    () => shouldRenderDbSchemaPreview ? dbSchemaSqlPreviewByTable(previewDbTables) : [],
+    [previewDbTables, shouldRenderDbSchemaPreview],
+  );
+  const dbSchemaGoStruct = useMemo(
+    () => shouldRenderDbSchemaPreview ? dbSchemaGoStructPreview(previewDbTables) : "",
+    [previewDbTables, shouldRenderDbSchemaPreview],
+  );
+  const dbSchemaGoStructByTable = useMemo(
+    () => shouldRenderDbSchemaPreview ? dbSchemaGoStructPreviewByTable(previewDbTables) : [],
+    [previewDbTables, shouldRenderDbSchemaPreview],
   );
   const openApiDocument = useMemo(
     () => shouldRenderServicePreview && servicePreviewMode === "openapi" && selectedService ? serviceOpenApi(selectedService.spec, selectedProject?.error_code ?? []) : null,
@@ -584,6 +600,7 @@ export function useWorkspaceController() {
   const dbSchemaPreviewRawContent = () => {
     if (!selectedProject) return "";
     if (dbSchemaPreviewMode === "sql") return dbSchemaSql;
+    if (dbSchemaPreviewMode === "gostruct") return dbSchemaGoStruct;
     if (dbSchemaPreviewMode === "html") {
       if (!dbSchemaPreviewMarkdown.trim()) return "";
       const html = htmlExportRef.current?.innerHTML ?? markdownToHtml(dbSchemaPreviewMarkdown);
@@ -638,10 +655,15 @@ export function useWorkspaceController() {
   };
   const exportDbSchemaPreview = () => {
     if (!selectedProject) return;
-    const dbSchemaBaseName = `${safeFileName(selectedProject.name)}-db-schema`;
+    const dbSchemaBaseName = `${safeFileName(selectedProject.name)}-${safeFileName(selectedDbTable?.name || "db-schema")}`;
     if (dbSchemaPreviewMode === "sql") {
       if (!dbSchemaSql.trim()) return;
       downloadFile(`${dbSchemaBaseName}.sql`, dbSchemaSql, "text/plain;charset=utf-8");
+      return;
+    }
+    if (dbSchemaPreviewMode === "gostruct") {
+      if (!dbSchemaGoStruct.trim()) return;
+      downloadFile(`${dbSchemaBaseName}.go`, dbSchemaGoStruct, "text/plain;charset=utf-8");
       return;
     }
     if (!dbSchemaPreviewMarkdown.trim()) return;
@@ -736,6 +758,9 @@ export function useWorkspaceController() {
     errorCodesPreviewMarkdown,
     errorCodesPreviewMode,
     dbSchemaSql,
+    dbSchemaSqlByTable,
+    dbSchemaGoStruct,
+    dbSchemaGoStructByTable,
     openApiDocument,
     goStruct,
     htmlExportRef,
