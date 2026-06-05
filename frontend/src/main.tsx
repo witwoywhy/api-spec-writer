@@ -1510,12 +1510,11 @@ function dbColumnSqlRows(columns: DbTable["columns"]) {
 }
 
 function dbColumnSql(column: DbTable["columns"][number], name: string, type: string, nameWidth: number, typeWidth: number) {
-  const parts = [
-    name.padEnd(nameWidth),
-    type.padEnd(typeWidth),
-  ];
-  if (column.nullable === "NO" && column.constraint !== "PRIMARY KEY") parts.push("NOT NULL");
-  if (column.constraint === "PRIMARY KEY" || column.constraint === "UNIQUE") parts.push(column.constraint);
+  const constraints: string[] = [];
+  if (column.nullable === "NO" && column.constraint !== "PRIMARY KEY") constraints.push("NOT NULL");
+  if (column.constraint === "PRIMARY KEY" || column.constraint === "UNIQUE") constraints.push(column.constraint);
+  const parts = [name.padEnd(nameWidth), constraints.length > 0 ? type.padEnd(typeWidth) : type];
+  parts.push(...constraints);
   return parts.join(" ");
 }
 
